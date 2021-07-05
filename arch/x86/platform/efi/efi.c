@@ -441,6 +441,23 @@ static int __init efi_config_init(const efi_config_table_type_t *arch_tables)
 	return ret;
 }
 
+enum efi_mem_crypto_t { EFI_MEM_NOT_ENCRYPTED, EFI_MEM_ENCRYPTED };
+static enum efi_mem_crypto_t efi_mem_crypto = EFI_MEM_NOT_ENCRYPTED;
+
+static void __init efi_set_mem_crypto(void)
+{
+	efi_memory_desc_t *md;
+
+	efi_mem_crypto = EFI_MEM_ENCRYPTED;
+
+	for_each_efi_memory_desc(md) {
+		if (!(md->attribute & EFI_MEMORY_CPU_CRYPTO)) {
+			efi_mem_crypto = EFI_MEM_NOT_ENCRYPTED;
+			break;
+		}
+	}
+}
+
 void __init efi_init(void)
 {
 	if (IS_ENABLED(CONFIG_X86_32) &&
@@ -493,6 +510,8 @@ void __init efi_init(void)
 
 	set_bit(EFI_RUNTIME_SERVICES, &efi.flags);
 	efi_clean_memmap();
+
+	efi_set_mem_crypto();
 
 	if (efi_enabled(EFI_DBG))
 		efi_print_memmap();
@@ -900,9 +919,16 @@ EFI_ATTR_SHOW(fw_vendor);
 EFI_ATTR_SHOW(runtime);
 EFI_ATTR_SHOW(config_table);
 
+static ssize_t mem_crypto_show(struct kobject *kobj,
+			       struct kobj_attribute *attr, char *buf)
+{
+	return sprintf(buf, "%u\n", efi_mem_crypto);
+}
+
 struct kobj_attribute efi_attr_fw_vendor = __ATTR_RO(fw_vendor);
 struct kobj_attribute efi_attr_runtime = __ATTR_RO(runtime);
 struct kobj_attribute efi_attr_config_table = __ATTR_RO(config_table);
+struct kobj_attribute efi_attr_mem_crypto = __ATTR_RO(mem_crypto);
 
 umode_t efi_attr_is_visible(struct kobject *kobj, struct attribute *attr, int n)
 {
