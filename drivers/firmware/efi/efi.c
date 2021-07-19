@@ -151,6 +151,7 @@ static ssize_t fw_platform_size_show(struct kobject *kobj,
 extern __weak struct kobj_attribute efi_attr_fw_vendor;
 extern __weak struct kobj_attribute efi_attr_runtime;
 extern __weak struct kobj_attribute efi_attr_config_table;
+extern __weak struct kobj_attribute efi_attr_mem_crypto;
 static struct kobj_attribute efi_attr_fw_platform_size =
 	__ATTR_RO(fw_platform_size);
 
@@ -160,6 +161,7 @@ static struct attribute *efi_subsys_attrs[] = {
 	&efi_attr_fw_vendor.attr,
 	&efi_attr_runtime.attr,
 	&efi_attr_config_table.attr,
+	&efi_attr_mem_crypto.attr,
 	NULL,
 };
 
