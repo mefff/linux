@@ -53,6 +53,8 @@
 #include <asm/x86_init.h>
 #include <asm/uv/uv.h>
 
+#include <uapi/misc/efi_mem_crypto.h>
+
 static unsigned long efi_systab_phys __initdata;
 static unsigned long prop_phys = EFI_INVALID_TABLE_ADDR;
 static unsigned long uga_phys = EFI_INVALID_TABLE_ADDR;
@@ -441,7 +443,6 @@ static int __init efi_config_init(const efi_config_table_type_t *arch_tables)
 	return ret;
 }
 
-enum efi_mem_crypto_t { EFI_MEM_NOT_ENCRYPTED, EFI_MEM_ENCRYPTED };
 static enum efi_mem_crypto_t efi_mem_crypto = EFI_MEM_NOT_ENCRYPTED;
 
 static void __init efi_set_mem_crypto(void)
