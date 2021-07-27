@@ -28,6 +28,8 @@
 
 #include <asm/page.h>
 
+#include <uapi/misc/efi_mem_crypto.h>
+
 #define EFI_SUCCESS		0
 #define EFI_LOAD_ERROR		( 1 | (1UL << (BITS_PER_LONG-1)))
 #define EFI_INVALID_PARAMETER	( 2 | (1UL << (BITS_PER_LONG-1)))
@@ -1281,5 +1283,7 @@ static inline struct efi_mokvar_table_entry *efi_mokvar_entry_find(
 	return NULL;
 }
 #endif
+
+extern enum efi_mem_crypto_t efi_mem_crypto;
 
 #endif /* _LINUX_EFI_H */

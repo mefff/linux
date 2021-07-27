@@ -443,7 +443,7 @@ static int __init efi_config_init(const efi_config_table_type_t *arch_tables)
 	return ret;
 }
 
-static enum efi_mem_crypto_t efi_mem_crypto = EFI_MEM_NOT_ENCRYPTED;
+enum efi_mem_crypto_t efi_mem_crypto = EFI_MEM_NOT_ENCRYPTED;
 
 static void __init efi_set_mem_crypto(void)
 {
