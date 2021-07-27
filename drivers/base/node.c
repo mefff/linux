@@ -16,10 +16,12 @@
 #include <linux/topology.h>
 #include <linux/nodemask.h>
 #include <linux/cpu.h>
+#include <linux/smp.h>
 #include <linux/device.h>
 #include <linux/pm_runtime.h>
 #include <linux/swap.h>
 #include <linux/slab.h>
+#include <linux/efi.h>
 
 static struct bus_type node_subsys = {
 	.name = "node",
@@ -67,6 +69,20 @@ static inline ssize_t cpulist_read(struct file *file, struct kobject *kobj,
 }
 
 static BIN_ATTR_RO(cpulist, 0);
+
+static ssize_t mem_crypto_show(struct device *dev,
+			       struct device_attribute *attr,
+			       char *buf)
+{
+	int nid = dev->id;
+	int local_node = cpu_to_mem(get_boot_cpu_id());
+
+	// TODO: check sysfs_emit
+	return sysfs_emit(buf, "%d\n",
+			  node_distance(local_node, nid) <= LOCAL_DISTANCE ?
+			  efi_mem_crypto : -1);
+}
+static DEVICE_ATTR_RO(mem_crypto);
 
 /**
  * struct node_access_nodes - Access class device to hold user visible
@@ -565,6 +581,7 @@ static struct attribute *node_dev_attrs[] = {
 	&dev_attr_numastat.attr,
 	&dev_attr_distance.attr,
 	&dev_attr_vmstat.attr,
+	&dev_attr_mem_crypto.attr,
 	NULL
 };
 

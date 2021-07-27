@@ -512,7 +512,7 @@ void __init numa_emulation(struct numa_meminfo *numa_meminfo, int numa_dist_cnt)
 			else
 				dist = phys_dist[physi * numa_dist_cnt + physj];
 
-			numa_set_distance(i, j, dist);
+			numa_set_distance(i, j, ++dist);
 		}
 	}
 
