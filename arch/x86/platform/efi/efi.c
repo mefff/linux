@@ -451,7 +451,7 @@ static void __init efi_set_mem_crypto(void)
 
 	efi_mem_crypto = EFI_MEM_ENCRYPTED;
 
-	for_each_efi_memory_desc(md) {
+	for_each_efi_memory_desc (md) {
 		if (!(md->attribute & EFI_MEMORY_CPU_CRYPTO)) {
 			efi_mem_crypto = EFI_MEM_NOT_ENCRYPTED;
 			break;
