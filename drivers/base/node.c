@@ -23,6 +23,8 @@
 #include <linux/slab.h>
 #include <linux/efi.h>
 
+enum numa_cpu_locality local_nodes[MAX_NUMNODES] = { [0 ... MAX_NUMNODES - 1] = NUMA_CPU_REMOTE };
+
 static struct bus_type node_subsys = {
 	.name = "node",
 	.dev_name = "node",
@@ -75,12 +77,14 @@ static ssize_t mem_crypto_show(struct device *dev,
 			       char *buf)
 {
 	int nid = dev->id;
-	int local_node = cpu_to_mem(get_boot_cpu_id());
 
 	// TODO: check sysfs_emit
-	return sysfs_emit(buf, "%d\n",
-			  node_distance(local_node, nid) <= LOCAL_DISTANCE ?
-			  efi_mem_crypto : -1);
+	return sysfs_emit(buf, "Memory in this node is %s\n",
+			  local_nodes[nid] == NUMA_CPU_LOCAL ?
+			  (efi_mem_crypto ?
+			   "capable of hardware encryption" :
+			   "not capable of hardware encryption") :
+			  "remote");
 }
 static DEVICE_ATTR_RO(mem_crypto);
 
