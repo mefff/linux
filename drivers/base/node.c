@@ -23,7 +23,8 @@
 #include <linux/slab.h>
 #include <linux/efi.h>
 
-enum numa_cpu_locality local_nodes[MAX_NUMNODES] = { [0 ... MAX_NUMNODES - 1] = NUMA_CPU_REMOTE };
+enum numa_cpu_locality local_nodes[MAX_NUMNODES] = { [0 ... MAX_NUMNODES - 1] =
+							     NUMA_CPU_REMOTE };
 
 static struct bus_type node_subsys = {
 	.name = "node",
@@ -73,18 +74,18 @@ static inline ssize_t cpulist_read(struct file *file, struct kobject *kobj,
 static BIN_ATTR_RO(cpulist, 0);
 
 static ssize_t mem_crypto_show(struct device *dev,
-			       struct device_attribute *attr,
-			       char *buf)
+			       struct device_attribute *attr, char *buf)
 {
 	int nid = dev->id;
 
 	// TODO: check sysfs_emit
-	return sysfs_emit(buf, "Memory in this node is %s\n",
-			  local_nodes[nid] == NUMA_CPU_LOCAL ?
-			  (efi_mem_crypto ?
-			   "capable of hardware encryption" :
-			   "not capable of hardware encryption") :
-			  "remote");
+	return sysfs_emit(
+		buf, "Memory in this node is %s\n",
+		local_nodes[nid] == NUMA_CPU_LOCAL ?
+			      (efi_mem_crypto ?
+				       "capable of hardware encryption" :
+				       "not capable of hardware encryption") :
+			      "remote");
 }
 static DEVICE_ATTR_RO(mem_crypto);
 
