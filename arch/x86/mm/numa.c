@@ -20,6 +20,7 @@
 #include "numa_internal.h"
 
 int numa_off;
+bool dummy_numa = false;
 nodemask_t numa_nodes_parsed __initdata;
 
 struct pglist_data *node_data[MAX_NUMNODES] __read_mostly;
@@ -706,6 +707,8 @@ static int __init dummy_numa_init(void)
 
 	node_set(0, numa_nodes_parsed);
 	numa_add_memblk(0, 0, PFN_PHYS(max_pfn));
+
+	dummy_numa = true;
 
 	return 0;
 }

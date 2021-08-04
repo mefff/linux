@@ -23,9 +23,6 @@
 #include <linux/slab.h>
 #include <linux/efi.h>
 
-enum numa_cpu_locality local_nodes[MAX_NUMNODES] = { [0 ... MAX_NUMNODES - 1] =
-							     NUMA_CPU_REMOTE };
-
 static struct bus_type node_subsys = {
 	.name = "node",
 	.dev_name = "node",
@@ -69,21 +66,21 @@ static inline ssize_t cpulist_show(struct device *dev,
 
 static DEVICE_ATTR_RO(cpulist);
 
+#ifdef CONFIG_NUMA
 static ssize_t mem_crypto_show(struct device *dev,
 			       struct device_attribute *attr, char *buf)
 {
-	int nid = dev->id;
+	struct node *node_dev = to_node(dev);
 
-	// TODO: check sysfs_emit
 	return sysfs_emit(
 		buf, "Memory in this node is %s\n",
-		local_nodes[nid] == NUMA_CPU_LOCAL ?
-			      (efi_mem_crypto ?
-				       "capable of hardware encryption" :
-				       "not capable of hardware encryption") :
-			      "remote");
+		node_dev->cpu_local ? (efi_mem_crypto ?
+					      "capable of hardware encryption" :
+					      "not capable of hardware encryption") :
+				     "remote");
 }
 static DEVICE_ATTR_RO(mem_crypto);
+#endif
 
 /**
  * struct node_access_nodes - Access class device to hold user visible
@@ -577,17 +574,32 @@ static ssize_t node_read_distance(struct device *dev,
 }
 static DEVICE_ATTR(distance, 0444, node_read_distance, NULL);
 
-static struct attribute *node_dev_attrs[] = {
+static struct attribute *node_dev_common_attrs[] = {
 	&dev_attr_cpumap.attr,
 	&dev_attr_cpulist.attr,
 	&dev_attr_meminfo.attr,
 	&dev_attr_numastat.attr,
 	&dev_attr_distance.attr,
 	&dev_attr_vmstat.attr,
+	NULL
+};
+/* Note that this also defines node_dev_common_group */
+ATTRIBUTE_GROUPS(node_dev_common);
+
+#ifdef CONFIG_NUMA
+static struct attribute *node_dev_extra_attrs[] = {
 	&dev_attr_mem_crypto.attr,
 	NULL
 };
-ATTRIBUTE_GROUPS(node_dev);
+static const struct attribute_group node_dev_extra_group = {
+	.attrs = node_dev_extra_attrs,
+};
+static const struct attribute_group *node_dev_extra_groups[] = {
+	&node_dev_common_group,
+	&node_dev_extra_group,
+	NULL
+};
+#endif
 
 #ifdef CONFIG_HUGETLBFS
 /*
@@ -662,7 +674,15 @@ static int register_node(struct node *node, int num)
 	node->dev.id = num;
 	node->dev.bus = &node_subsys;
 	node->dev.release = node_device_release;
-	node->dev.groups = node_dev_groups;
+#ifdef CONFIG_NUMA
+	if (node->cpu_local) {
+		node->dev.groups = node_dev_extra_groups;
+	} else {
+		node->dev.groups = node_dev_common_groups;
+	}
+#else
+	node->dev.groups = node_dev_common_groups;
+#endif
 	error = device_register(&node->dev);
 
 	if (error)
@@ -987,6 +1007,17 @@ int __register_one_node(int nid)
 	node_devices[nid] = kzalloc(sizeof(struct node), GFP_KERNEL);
 	if (!node_devices[nid])
 		return -ENOMEM;
+
+	// TODO: do I need another CONFIG like ACPI_NUMA? or
+	// numa_emulation config
+#ifdef CONFIG_NUMA
+	if (dummy_numa) {
+		// TODO: can there be a remote node if dummy_numa?
+		node_devices[nid]->cpu_local = emu_nid_to_phys[nid] == 0;
+	} else {
+		node_devices[nid]->cpu_local = node_to_pxm(nid) != PXM_INVAL;
+	}
+#endif
 
 	error = register_node(node_devices[nid], nid);
 
