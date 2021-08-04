@@ -94,6 +94,9 @@ struct node {
 	struct list_head cache_attrs;
 	struct device *cache_dev;
 #endif
+#ifdef CONFIG_NUMA
+	bool cpu_local;
+#endif
 };
 
 struct memory_block;
@@ -117,13 +120,6 @@ extern void unregister_node(struct node *node);
 /* Core of the node registration - only memory hotplug should use this */
 extern int __register_one_node(int nid);
 
-// TODO: find a better word for LOCAL/REMOTE
-enum numa_cpu_locality {
-	NUMA_CPU_LOCAL,
-	NUMA_CPU_REMOTE,
-};
-extern enum numa_cpu_locality local_nodes[MAX_NUMNODES];
-
 /* Registers an online node */
 static inline int register_one_node(int nid)
 {
@@ -133,13 +129,6 @@ static inline int register_one_node(int nid)
 		struct pglist_data *pgdat = NODE_DATA(nid);
 		unsigned long start_pfn = pgdat->node_start_pfn;
 		unsigned long end_pfn = start_pfn + pgdat->node_spanned_pages;
-
-		// TODO: research more about nid == 0
-		/* if nid == 0 and node_to_pxm(nid) == PXM_INVAL
-		 * then there is no slit/srat table configured
-		 */
-		if (node_to_pxm(nid) != PXM_INVAL || nid == 0)
-			local_nodes[nid] = NUMA_CPU_LOCAL;
 
 		error = __register_one_node(nid);
 		if (error)

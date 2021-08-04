@@ -20,6 +20,8 @@
 #define NODE_MIN_SIZE (4*1024*1024)
 
 extern int numa_off;
+extern bool dummy_numa;
+extern int emu_nid_to_phys[];
 
 /*
  * __apicid_to_node[] stores the raw mapping between physical apicid and
