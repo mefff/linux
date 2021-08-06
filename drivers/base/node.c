@@ -999,6 +999,36 @@ static void init_node_hugetlb_work(int nid) { }
 
 #endif
 
+#ifdef CONFIG_NUMA
+#if !defined(CONFIG_ACPI_NUMA) && !defined(CONFIG_NUMA_EMU)
+static void set_cpu_local(int nid)
+{
+	node_devices[nid]->cpu_local = nid == 0;
+
+}
+#elif defined(CONFIG_ACPI_NUMA) && !defined(CONFIG_NUMA_EMU)
+static void set_cpu_local(int nid)
+{
+	node_devices[nid]->cpu_local =
+		dummy_numa ? nid == 0 : node_to_pxm(nid) != PXM_INVAL;
+
+}
+#elif !defined(CONFIG_ACPI_NUMA) && defined(CONFIG_NUMA_EMU)
+static void set_cpu_local(int nid)
+{
+	node_devices[nid]->cpu_local = emu_nid_to_phys[nid] == 0;
+
+}
+#elif defined(CONFIG_ACPI_NUMA) && defined(CONFIG_NUMA_EMU)
+static void set_cpu_local(int nid)
+{
+	int real_nid = emu_nid_to_phys[nid];
+	node_devices[nid]->cpu_local =
+		dummy_numa ? real_nid == 0 : node_to_pxm(real_nid) != PXM_INVAL;
+}
+#endif
+#endif
+
 int __register_one_node(int nid)
 {
 	int error;
@@ -1008,15 +1038,8 @@ int __register_one_node(int nid)
 	if (!node_devices[nid])
 		return -ENOMEM;
 
-	// TODO: do I need another CONFIG like ACPI_NUMA? or
-	// numa_emulation config
 #ifdef CONFIG_NUMA
-	if (dummy_numa) {
-		// TODO: can there be a remote node if dummy_numa?
-		node_devices[nid]->cpu_local = emu_nid_to_phys[nid] == 0;
-	} else {
-		node_devices[nid]->cpu_local = node_to_pxm(nid) != PXM_INVAL;
-	}
+	set_cpu_local(nid);
 #endif
 
 	error = register_node(node_devices[nid], nid);
