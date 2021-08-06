@@ -67,19 +67,12 @@ static inline ssize_t cpulist_show(struct device *dev,
 static DEVICE_ATTR_RO(cpulist);
 
 #ifdef CONFIG_NUMA
-static ssize_t mem_crypto_show(struct device *dev,
-			       struct device_attribute *attr, char *buf)
+static ssize_t mem_crypto_capable_show(struct device *dev,
+				       struct device_attribute *attr, char *buf)
 {
-	struct node *node_dev = to_node(dev);
-
-	return sysfs_emit(
-		buf, "Memory in this node is %s\n",
-		node_dev->cpu_local ? (efi_mem_crypto ?
-					      "capable of hardware encryption" :
-					      "not capable of hardware encryption") :
-				     "remote");
+	return sysfs_emit(buf, "%d\n", efi_mem_crypto);
 }
-static DEVICE_ATTR_RO(mem_crypto);
+static DEVICE_ATTR_RO(mem_crypto_capable);
 #endif
 
 /**
@@ -588,7 +581,7 @@ ATTRIBUTE_GROUPS(node_dev_common);
 
 #ifdef CONFIG_NUMA
 static struct attribute *node_dev_extra_attrs[] = {
-	&dev_attr_mem_crypto.attr,
+	&dev_attr_mem_crypto_capable.attr,
 	NULL
 };
 static const struct attribute_group node_dev_extra_group = {
