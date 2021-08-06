@@ -53,8 +53,6 @@
 #include <asm/x86_init.h>
 #include <asm/uv/uv.h>
 
-#include <uapi/misc/efi_mem_crypto.h>
-
 static unsigned long efi_systab_phys __initdata;
 static unsigned long prop_phys = EFI_INVALID_TABLE_ADDR;
 static unsigned long uga_phys = EFI_INVALID_TABLE_ADDR;
@@ -443,17 +441,17 @@ static int __init efi_config_init(const efi_config_table_type_t *arch_tables)
 	return ret;
 }
 
-enum efi_mem_crypto_t efi_mem_crypto = EFI_MEM_NOT_ENCRYPTED;
+enum efi_mem_crypto_t efi_mem_crypto = EFI_MEM_ENCRYPTION_NOT_CAPABLE;
 
 static void __init efi_set_mem_crypto(void)
 {
 	efi_memory_desc_t *md;
 
-	efi_mem_crypto = EFI_MEM_ENCRYPTED;
+	efi_mem_crypto = EFI_MEM_ENCRYPTION_CAPABLE;
 
 	for_each_efi_memory_desc (md) {
 		if (!(md->attribute & EFI_MEMORY_CPU_CRYPTO)) {
-			efi_mem_crypto = EFI_MEM_NOT_ENCRYPTED;
+			efi_mem_crypto = EFI_MEM_ENCRYPTION_NOT_CAPABLE;
 			break;
 		}
 	}
@@ -920,16 +918,9 @@ EFI_ATTR_SHOW(fw_vendor);
 EFI_ATTR_SHOW(runtime);
 EFI_ATTR_SHOW(config_table);
 
-static ssize_t mem_crypto_show(struct kobject *kobj,
-			       struct kobj_attribute *attr, char *buf)
-{
-	return sprintf(buf, "%u\n", efi_mem_crypto);
-}
-
 struct kobj_attribute efi_attr_fw_vendor = __ATTR_RO(fw_vendor);
 struct kobj_attribute efi_attr_runtime = __ATTR_RO(runtime);
 struct kobj_attribute efi_attr_config_table = __ATTR_RO(config_table);
-struct kobj_attribute efi_attr_mem_crypto = __ATTR_RO(mem_crypto);
 
 umode_t efi_attr_is_visible(struct kobject *kobj, struct attribute *attr, int n)
 {
