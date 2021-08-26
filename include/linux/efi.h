@@ -238,7 +238,7 @@ typedef efi_status_t efi_get_variable_t (efi_char16_t *name, efi_guid_t *vendor,
 					 unsigned long *data_size, void *data);
 typedef efi_status_t efi_get_next_variable_t (unsigned long *name_size, efi_char16_t *name,
 					      efi_guid_t *vendor);
-typedef efi_status_t efi_set_variable_t (efi_char16_t *name, efi_guid_t *vendor, 
+typedef efi_status_t efi_set_variable_t (efi_char16_t *name, efi_guid_t *vendor,
 					 u32 attr, unsigned long data_size,
 					 void *data);
 typedef efi_status_t efi_get_next_high_mono_count_t (u32 *count);
@@ -1287,5 +1287,11 @@ enum efi_mem_crypto_t {
 	EFI_MEM_ENCRYPTION_CAPABLE,
 };
 extern enum efi_mem_crypto_t efi_mem_crypto;
+
+enum efi_region_cc_type {
+	EFI_REGION_CC_NOT_USABLE,
+	EFI_REGION_CC_NOT_CAPABLE,
+	EFI_REGION_CC_CAPABLE,
+};
 
 #endif /* _LINUX_EFI_H */

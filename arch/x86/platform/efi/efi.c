@@ -443,18 +443,54 @@ static int __init efi_config_init(const efi_config_table_type_t *arch_tables)
 
 enum efi_mem_crypto_t efi_mem_crypto = EFI_MEM_ENCRYPTION_NOT_CAPABLE;
 
-static void __init efi_set_mem_crypto(void)
+// TODO: u64 vs unsigned long long
+struct efi_region_cc {
+	u64 start;
+	u64 size;
+	enum efi_region_cc_type type;
+};
+struct efi_regions_cc {
+	struct efi_region_cc regions[64];
+	u64 size;
+};
+
+struct efi_regions_cc efi_regions_cc;
+
+// TODO: check if I'm able to sneak this loop onto another existent loop
+static void __init efi_set_regions_cc(void)
 {
 	efi_memory_desc_t *md;
+	u64 i = 0;
 
 	efi_mem_crypto = EFI_MEM_ENCRYPTION_CAPABLE;
 
 	for_each_efi_memory_desc (md) {
-		if (!(md->attribute & EFI_MEMORY_CPU_CRYPTO)) {
-			efi_mem_crypto = EFI_MEM_ENCRYPTION_NOT_CAPABLE;
+		efi_regions_cc.regions[i].start = md->phys_addr;
+		efi_regions_cc.regions[i].size = md->num_pages << EFI_PAGE_SHIFT;
+
+		switch (md->type) {
+		case EFI_LOADER_CODE:
+		case EFI_LOADER_DATA:
+		case EFI_BOOT_SERVICES_CODE:
+		case EFI_BOOT_SERVICES_DATA:
+		case EFI_CONVENTIONAL_MEMORY:
+			if (!(efi_soft_reserve_enabled() && (md->attribute & EFI_MEMORY_SP)) &&
+			    md->attribute & EFI_MEMORY_WB)
+				efi_regions_cc.regions[i].type =
+					md->attribute & EFI_MEMORY_CPU_CRYPTO ?
+						      EFI_REGION_CC_CAPABLE :
+						      EFI_REGION_CC_NOT_CAPABLE;
+			else
+				efi_regions_cc.regions[i].type = EFI_REGION_CC_NOT_USABLE;
 			break;
+		default:
+			efi_regions_cc.regions[i].type = EFI_REGION_CC_NOT_USABLE;
 		}
+
+		i++;
 	}
+
+	efi_regions_cc.size = i;
 }
 
 void __init efi_init(void)
@@ -510,7 +546,19 @@ void __init efi_init(void)
 	set_bit(EFI_RUNTIME_SERVICES, &efi.flags);
 	efi_clean_memmap();
 
-	efi_set_mem_crypto();
+	//efi_set_mem_crypto();
+	efi_set_regions_cc();
+
+	{
+		u64 i;
+
+		for(i = 0; i < efi_regions_cc.size; i++)
+			pr_info("efi_regions: mem%02llu: start: %#llx | size: %#llx | cc: %d\n",
+				i, efi_regions_cc.regions[i].start,
+				efi_regions_cc.regions[i].size,
+				efi_regions_cc.regions[i].type);
+
+	}
 
 	if (efi_enabled(EFI_DBG))
 		efi_print_memmap();
