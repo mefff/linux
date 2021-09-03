@@ -146,6 +146,7 @@ static void __init do_add_efi_memmap(void)
 		unsigned long long start = md->phys_addr;
 		unsigned long long size = md->num_pages << EFI_PAGE_SHIFT;
 		int e820_type;
+		int e820_encryption = 0;
 
 		switch (md->type) {
 		case EFI_LOADER_CODE:
@@ -156,8 +157,10 @@ static void __init do_add_efi_memmap(void)
 			if (efi_soft_reserve_enabled()
 			    && (md->attribute & EFI_MEMORY_SP))
 				e820_type = E820_TYPE_SOFT_RESERVED;
-			else if (md->attribute & EFI_MEMORY_WB)
+			else if (md->attribute & EFI_MEMORY_WB) {
 				e820_type = E820_TYPE_RAM;
+				e820_encryption = !!(md->attribute & EFI_MEMORY_CPU_CRYPTO);
+			}
 			else
 				e820_type = E820_TYPE_RESERVED;
 			break;

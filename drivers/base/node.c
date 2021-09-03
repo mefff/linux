@@ -23,6 +23,8 @@
 #include <linux/slab.h>
 #include <linux/efi.h>
 
+#include <asm/e820/api.h>
+
 static struct bus_type node_subsys = {
 	.name = "node",
 	.dev_name = "node",
@@ -1033,6 +1035,11 @@ int __register_one_node(int nid)
 
 #ifdef CONFIG_NUMA
 	set_cpu_local(nid);
+#endif
+
+#ifdef CONFIG_EFI
+	e820__mapped_any(0, 0xFFFF, E820_TYPE_RAM);
+	e820__print_table("me, who else?");
 #endif
 
 	error = register_node(node_devices[nid], nid);
