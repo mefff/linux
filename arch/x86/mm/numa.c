@@ -20,7 +20,7 @@
 #include "numa_internal.h"
 
 int numa_off;
-bool dummy_numa = false;
+bool dummy_numa;
 nodemask_t numa_nodes_parsed __initdata;
 
 struct pglist_data *node_data[MAX_NUMNODES] __read_mostly;
@@ -727,6 +727,7 @@ static int __init dummy_numa_init(void)
  */
 void __init x86_numa_init(void)
 {
+	dummy_numa = false;
 	if (!numa_off) {
 #ifdef CONFIG_ACPI_NUMA
 		if (!numa_init(x86_acpi_numa_init))
@@ -738,6 +739,7 @@ void __init x86_numa_init(void)
 #endif
 	}
 
+	dummy_numa = true;
 	numa_init(dummy_numa_init);
 }
 
