@@ -449,7 +449,7 @@ static void __init efi_set_mem_crypto(void)
 
 	efi_mem_crypto = EFI_MEM_ENCRYPTION_CAPABLE;
 
-	for_each_efi_memory_desc (md) {
+	for_each_efi_memory_desc(md) {
 		switch (md->type) {
 		/* System memory after ExitBootServices */
 		case EFI_LOADER_CODE:

@@ -72,7 +72,7 @@ static BIN_ATTR_RO(cpulist, 0);
 
 #ifdef CONFIG_NUMA
 static ssize_t crypto_capable_show(struct device *dev,
-				       struct device_attribute *attr, char *buf)
+				   struct device_attribute *attr, char *buf)
 {
 	return sysfs_emit(buf, "%d\n", efi_mem_crypto);
 }
@@ -687,11 +687,10 @@ static int register_node(struct node *node, int num)
 	node->dev.bus = &node_subsys;
 	node->dev.release = node_device_release;
 #ifdef CONFIG_NUMA
-	if (node->cpu_local) {
+	if (node->cpu_local)
 		node->dev.groups = node_dev_crypto_groups;
-	} else {
+	else
 		node->dev.groups = node_dev_groups;
-	}
 #else
 	node->dev.groups = node_dev_groups;
 #endif
@@ -1016,25 +1015,23 @@ static void init_node_hugetlb_work(int nid) { }
 static void set_cpu_local(int nid)
 {
 	node_devices[nid]->cpu_local = nid == 0;
-
 }
 #elif defined(CONFIG_ACPI_NUMA) && !defined(CONFIG_NUMA_EMU)
 static void set_cpu_local(int nid)
 {
 	node_devices[nid]->cpu_local =
 		dummy_numa ? nid == 0 : node_to_pxm(nid) != PXM_INVAL;
-
 }
 #elif !defined(CONFIG_ACPI_NUMA) && defined(CONFIG_NUMA_EMU)
 static void set_cpu_local(int nid)
 {
 	node_devices[nid]->cpu_local = emu_nid_to_phys[nid] == 0;
-
 }
 #elif defined(CONFIG_ACPI_NUMA) && defined(CONFIG_NUMA_EMU)
 static void set_cpu_local(int nid)
 {
 	int real_nid = emu_nid_to_phys[nid];
+
 	node_devices[nid]->cpu_local =
 		dummy_numa ? real_nid == 0 : node_to_pxm(real_nid) != PXM_INVAL;
 }
