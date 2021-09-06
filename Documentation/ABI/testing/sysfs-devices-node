@@ -1,0 +1,8 @@
+What:		/sys/devices/system/node/nodeX/crypto_capable
+Date:		Septempber 2021
+Contact:	Martin Fernandez <martin.fernandez@eclypsium.com>
+Users:		fwupd
+Description:
+		TODO
+		This value is 1 if all system memory is marked with EFI_MEMORY_CPU_CRYPTO.
+		It is 0 otherwise. This attribute will only be available if node X is "local".

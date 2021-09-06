@@ -71,12 +71,12 @@ static inline ssize_t cpulist_read(struct file *file, struct kobject *kobj,
 static BIN_ATTR_RO(cpulist, 0);
 
 #ifdef CONFIG_NUMA
-static ssize_t mem_crypto_capable_show(struct device *dev,
+static ssize_t crypto_capable_show(struct device *dev,
 				       struct device_attribute *attr, char *buf)
 {
 	return sysfs_emit(buf, "%d\n", efi_mem_crypto);
 }
-static DEVICE_ATTR_RO(mem_crypto_capable);
+static DEVICE_ATTR_RO(crypto_capable);
 #endif
 
 /**
@@ -599,7 +599,7 @@ static const struct attribute_group *node_dev_groups[] = {
 
 #ifdef CONFIG_NUMA
 static struct attribute *node_dev_crypto_attrs[] = {
-	&dev_attr_mem_crypto_capable.attr,
+	&dev_attr_crypto_capable.attr,
 	NULL
 };
 
