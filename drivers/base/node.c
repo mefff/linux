@@ -1011,32 +1011,36 @@ static void init_node_hugetlb_work(int nid) { }
 #endif
 
 #ifdef CONFIG_NUMA
-#if !defined(CONFIG_ACPI_NUMA) && !defined(CONFIG_NUMA_EMU)
-static void set_cpu_local(int nid)
+#ifdef CONFIG_NUMA_EMU
+static int get_real_nid(int nid)
 {
-	node_devices[nid]->cpu_local = nid == 0;
+	return emu_nid_to_phys[nid];
 }
-#elif defined(CONFIG_ACPI_NUMA) && !defined(CONFIG_NUMA_EMU)
-static void set_cpu_local(int nid)
+#else
+static int get_real_nid(int nid)
 {
-	node_devices[nid]->cpu_local =
-		dummy_numa ? nid == 0 : node_to_pxm(nid) != PXM_INVAL;
+	return nid;
 }
-#elif !defined(CONFIG_ACPI_NUMA) && defined(CONFIG_NUMA_EMU)
-static void set_cpu_local(int nid)
-{
-	node_devices[nid]->cpu_local = emu_nid_to_phys[nid] == 0;
-}
-#elif defined(CONFIG_ACPI_NUMA) && defined(CONFIG_NUMA_EMU)
-static void set_cpu_local(int nid)
-{
-	int real_nid = emu_nid_to_phys[nid];
+#endif
 
-	node_devices[nid]->cpu_local =
+static void set_cpu_local(int nid)
+{
+	int real_nid, cpu_local;
+
+	real_nid = get_real_nid(nid);
+
+#ifdef CONFIG_ACPI_NUMA
+	cpu_local =
 		dummy_numa ? real_nid == 0 : node_to_pxm(real_nid) != PXM_INVAL;
+#else
+	cpu_local = real_nid == 0;
+#endif
+
+	node_devices[nid]->cpu_local = cpu_local;
 }
-#endif
-#endif
+#else
+#define set_cpu_local(nid)
+#endif /* CONFIG_NUMA */
 
 int __register_one_node(int nid)
 {
@@ -1047,9 +1051,7 @@ int __register_one_node(int nid)
 	if (!node_devices[nid])
 		return -ENOMEM;
 
-#ifdef CONFIG_NUMA
 	set_cpu_local(nid);
-#endif
 
 	error = register_node(node_devices[nid], nid);
 
