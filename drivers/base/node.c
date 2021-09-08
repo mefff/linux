@@ -673,7 +673,7 @@ static void node_device_release(struct device *dev)
 
 #if defined(CONFIG_NUMA) && defined(CONFIG_EFI)
 // TODO: learn more about const
-static const struct attribute_group** select_attr_groups(int cpu_local)
+static const struct attribute_group **select_attr_groups(int cpu_local)
 {
 	if (cpu_local)
 		return node_dev_crypto_groups;
@@ -681,7 +681,7 @@ static const struct attribute_group** select_attr_groups(int cpu_local)
 		return node_dev_groups;
 }
 #else
-static const struct attribute_group** select_attr_groups(int cpu_local)
+static const struct attribute_group **select_attr_groups(int cpu_local)
 {
 	return node_dev_groups;
 }
