@@ -671,6 +671,22 @@ static void node_device_release(struct device *dev)
 	kfree(node);
 }
 
+#if defined(CONFIG_NUMA) && defined(CONFIG_EFI)
+// TODO: learn more about const
+static const struct attribute_group** select_attr_groups(int cpu_local)
+{
+	if (cpu_local)
+		return node_dev_crypto_groups;
+	else
+		return node_dev_groups;
+}
+#else
+static const struct attribute_group** select_attr_groups(int cpu_local)
+{
+	return node_dev_groups;
+}
+#endif
+
 /*
  * register_node - Setup a sysfs device for a node.
  * @num - Node number to use when creating the device.
@@ -684,14 +700,8 @@ static int register_node(struct node *node, int num)
 	node->dev.id = num;
 	node->dev.bus = &node_subsys;
 	node->dev.release = node_device_release;
-#if defined(CONFIG_NUMA) && defined(CONFIG_EFI)
-	if (node->cpu_local)
-		node->dev.groups = node_dev_crypto_groups;
-	else
-		node->dev.groups = node_dev_groups;
-#else
-	node->dev.groups = node_dev_groups;
-#endif
+	node->dev.groups = select_attr_groups(node->cpu_local);
+
 	error = device_register(&node->dev);
 
 	if (error)
