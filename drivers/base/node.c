@@ -70,7 +70,7 @@ static inline ssize_t cpulist_read(struct file *file, struct kobject *kobj,
 
 static BIN_ATTR_RO(cpulist, 0);
 
-#ifdef CONFIG_NUMA
+#if defined(CONFIG_NUMA) && defined(CONFIG_EFI)
 static ssize_t crypto_capable_show(struct device *dev,
 				   struct device_attribute *attr, char *buf)
 {
@@ -571,15 +571,13 @@ static ssize_t node_read_distance(struct device *dev,
 }
 static DEVICE_ATTR(distance, 0444, node_read_distance, NULL);
 
-static struct attribute *node_dev_common_attrs[] = {
+static struct attribute *node_dev_attrs[] = {
 	&dev_attr_meminfo.attr,
 	&dev_attr_numastat.attr,
 	&dev_attr_distance.attr,
 	&dev_attr_vmstat.attr,
 	NULL
 };
-/* Note that this also defines node_dev_common_group */
-ATTRIBUTE_GROUPS(node_dev_common);
 
 static struct bin_attribute *node_dev_bin_attrs[] = {
 	&bin_attr_cpumap,
@@ -597,7 +595,7 @@ static const struct attribute_group *node_dev_groups[] = {
 	NULL
 };
 
-#ifdef CONFIG_NUMA
+#if defined(CONFIG_NUMA) && defined(CONFIG_EFI)
 static struct attribute *node_dev_crypto_attrs[] = {
 	&dev_attr_crypto_capable.attr,
 	NULL
@@ -606,6 +604,7 @@ static struct attribute *node_dev_crypto_attrs[] = {
 static const struct attribute_group node_dev_crypto_group = {
 	.attrs = node_dev_crypto_attrs,
 };
+
 static const struct attribute_group *node_dev_crypto_groups[] = {
 	&node_dev_group,
 	&node_dev_crypto_group,
@@ -686,7 +685,7 @@ static int register_node(struct node *node, int num)
 	node->dev.id = num;
 	node->dev.bus = &node_subsys;
 	node->dev.release = node_device_release;
-#ifdef CONFIG_NUMA
+#if defined(CONFIG_NUMA) && defined(CONFIG_EFI)
 	if (node->cpu_local)
 		node->dev.groups = node_dev_crypto_groups;
 	else
