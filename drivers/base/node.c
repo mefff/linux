@@ -20,6 +20,7 @@
 #include <linux/pm_runtime.h>
 #include <linux/swap.h>
 #include <linux/slab.h>
+#include <linux/efi.h>
 
 static struct bus_type node_subsys = {
 	.name = "node",
@@ -67,6 +68,15 @@ static inline ssize_t cpulist_read(struct file *file, struct kobject *kobj,
 }
 
 static BIN_ATTR_RO(cpulist, 0);
+
+#if defined(CONFIG_NUMA) && defined(CONFIG_EFI)
+static ssize_t crypto_capable_show(struct device *dev,
+				   struct device_attribute *attr, char *buf)
+{
+	return sysfs_emit(buf, "%d\n", efi_mem_crypto);
+}
+static DEVICE_ATTR_RO(crypto_capable);
+#endif
 
 /**
  * struct node_access_nodes - Access class device to hold user visible
@@ -584,6 +594,23 @@ static const struct attribute_group *node_dev_groups[] = {
 	NULL
 };
 
+#if defined(CONFIG_NUMA) && defined(CONFIG_EFI)
+static struct attribute *node_dev_crypto_attrs[] = {
+	&dev_attr_crypto_capable.attr,
+	NULL
+};
+
+static const struct attribute_group node_dev_crypto_group = {
+	.attrs = node_dev_crypto_attrs,
+};
+
+static const struct attribute_group *node_dev_crypto_groups[] = {
+	&node_dev_group,
+	&node_dev_crypto_group,
+	NULL
+};
+#endif
+
 #ifdef CONFIG_HUGETLBFS
 /*
  * hugetlbfs per node attributes registration interface:
@@ -644,6 +671,21 @@ static void node_device_release(struct device *dev)
 	kfree(node);
 }
 
+#if defined(CONFIG_NUMA) && defined(CONFIG_EFI)
+static const struct attribute_group **select_attr_groups(bool cpu_local)
+{
+	if (cpu_local)
+		return node_dev_crypto_groups;
+	else
+		return node_dev_groups;
+}
+#else
+static const struct attribute_group **select_attr_groups(bool cpu_local)
+{
+	return node_dev_groups;
+}
+#endif
+
 /*
  * register_node - Setup a sysfs device for a node.
  * @num - Node number to use when creating the device.
@@ -657,7 +699,8 @@ static int register_node(struct node *node, int num)
 	node->dev.id = num;
 	node->dev.bus = &node_subsys;
 	node->dev.release = node_device_release;
-	node->dev.groups = node_dev_groups;
+	node->dev.groups = select_attr_groups(node->cpu_local);
+
 	error = device_register(&node->dev);
 
 	if (error)
@@ -974,6 +1017,39 @@ static void init_node_hugetlb_work(int nid) { }
 
 #endif
 
+#ifdef CONFIG_NUMA
+#ifdef CONFIG_NUMA_EMU
+static int get_real_nid(int nid)
+{
+	return emu_nid_to_phys[nid];
+}
+#else
+static int get_real_nid(int nid)
+{
+	return nid;
+}
+#endif
+
+static void set_cpu_local(int nid)
+{
+	int real_nid;
+	bool cpu_local;
+
+	real_nid = get_real_nid(nid);
+
+#ifdef CONFIG_ACPI_NUMA
+	cpu_local =
+		dummy_numa ? real_nid == 0 : node_to_pxm(real_nid) != PXM_INVAL;
+#else
+	cpu_local = real_nid == 0;
+#endif
+
+	node_devices[nid]->cpu_local = cpu_local;
+}
+#else
+#define set_cpu_local(nid)
+#endif /* CONFIG_NUMA */
+
 int __register_one_node(int nid)
 {
 	int error;
@@ -982,6 +1058,8 @@ int __register_one_node(int nid)
 	node_devices[nid] = kzalloc(sizeof(struct node), GFP_KERNEL);
 	if (!node_devices[nid])
 		return -ENOMEM;
+
+	set_cpu_local(nid);
 
 	error = register_node(node_devices[nid], nid);
 

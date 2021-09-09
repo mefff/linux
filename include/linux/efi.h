@@ -1282,4 +1282,11 @@ static inline struct efi_mokvar_table_entry *efi_mokvar_entry_find(
 }
 #endif
 
+enum efi_mem_crypto_t {
+	EFI_MEM_ENCRYPTION_NOT_CAPABLE,
+	EFI_MEM_ENCRYPTION_CAPABLE,
+};
+
+extern enum efi_mem_crypto_t efi_mem_crypto;
+
 #endif /* _LINUX_EFI_H */

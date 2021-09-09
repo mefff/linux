@@ -19,6 +19,8 @@
 #include <linux/cpumask.h>
 #include <linux/list.h>
 #include <linux/workqueue.h>
+#include <linux/acpi.h>
+#include <acpi/acpi_numa.h>
 
 /**
  * struct node_hmem_attrs - heterogeneous memory performance attributes
@@ -91,6 +93,9 @@ struct node {
 #ifdef CONFIG_HMEM_REPORTING
 	struct list_head cache_attrs;
 	struct device *cache_dev;
+#endif
+#ifdef CONFIG_NUMA
+	bool cpu_local;
 #endif
 };
 

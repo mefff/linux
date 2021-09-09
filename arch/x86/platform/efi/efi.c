@@ -441,6 +441,31 @@ static int __init efi_config_init(const efi_config_table_type_t *arch_tables)
 	return ret;
 }
 
+enum efi_mem_crypto_t efi_mem_crypto = EFI_MEM_ENCRYPTION_NOT_CAPABLE;
+
+static void __init efi_set_mem_crypto(void)
+{
+	efi_memory_desc_t *md;
+
+	efi_mem_crypto = EFI_MEM_ENCRYPTION_CAPABLE;
+
+	for_each_efi_memory_desc(md) {
+		switch (md->type) {
+		/* System memory after ExitBootServices */
+		case EFI_LOADER_CODE:
+		case EFI_LOADER_DATA:
+		case EFI_BOOT_SERVICES_CODE:
+		case EFI_BOOT_SERVICES_DATA:
+		case EFI_CONVENTIONAL_MEMORY:
+		case EFI_ACPI_RECLAIM_MEMORY:
+			if (!(md->attribute & EFI_MEMORY_CPU_CRYPTO)) {
+				efi_mem_crypto = EFI_MEM_ENCRYPTION_NOT_CAPABLE;
+				return;
+			}
+		}
+	}
+}
+
 void __init efi_init(void)
 {
 	if (IS_ENABLED(CONFIG_X86_32) &&
@@ -493,6 +518,8 @@ void __init efi_init(void)
 
 	set_bit(EFI_RUNTIME_SERVICES, &efi.flags);
 	efi_clean_memmap();
+
+	efi_set_mem_crypto();
 
 	if (efi_enabled(EFI_DBG))
 		efi_print_memmap();
