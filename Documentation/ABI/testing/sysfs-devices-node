@@ -8,4 +8,4 @@ Description:
 		memory is capable of being protected with the CPU’s
 		memory cryptographic capabilities. It is 0
 		otherwise. This attribute will only be available if
-		node X is "local".
+		node X is local.
