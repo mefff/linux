@@ -346,7 +346,7 @@ int __init e820__update_table(struct e820_table *table)
 	unsigned long long last_addr;
 	u32 new_nr_entries, overlap_entries;
 	u32 i, chg_idx, chg_nr;
-	bool crypto;
+	bool crypto = false;
 
 	/* If there's only one memory region, don't bother: */
 	if (table->nr_entries < 2)
