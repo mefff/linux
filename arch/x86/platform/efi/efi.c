@@ -441,12 +441,13 @@ static int __init efi_config_init(const efi_config_table_type_t *arch_tables)
 	return ret;
 }
 
-static void __init efi_set_mem_crypto(void)
+static void __init efi_set_e820_regions_as_crypto(void)
 {
 	efi_memory_desc_t *md;
 	u64 start = 0, size = 0, last_start = 0, last_size = 0;
 
 	e820__print_table("efi_set_mem_crypto before");
+	// TODO: Why I don't care about the region types?
 	for_each_efi_memory_desc(md) {
 		u64 md_start = md->phys_addr;
 		u64 md_size = md->num_pages << EFI_PAGE_SHIFT;
@@ -455,6 +456,8 @@ static void __init efi_set_mem_crypto(void)
 		pr_info("start: %llx | size: %llx | md_start: %llx | md_size: %llx | last_start: %llx | last_size: %llx\n",
 			start, size, md_start, md_size, last_start, last_size);
 
+		// TODO: this should be negated, but I use this for
+		// testing purpuses
 		if (!(md->attribute & EFI_MEMORY_CPU_CRYPTO)) {
 			/* contiguous regions */
 			if (last_start + last_size == md_start) {
@@ -478,6 +481,7 @@ static void __init efi_set_mem_crypto(void)
 		last_size = md_size;
 	}
 
+	// TODO: can I do something with this?
 	if (size > 0)
 		e820__mark_regions_as_crypto(start, size);
 
@@ -537,7 +541,7 @@ void __init efi_init(void)
 	set_bit(EFI_RUNTIME_SERVICES, &efi.flags);
 	efi_clean_memmap();
 
-	efi_set_mem_crypto();
+	efi_set_e820_regions_as_crypto();
 
 	if (efi_enabled(EFI_DBG))
 		efi_print_memmap();
