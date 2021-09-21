@@ -191,6 +191,22 @@ bool __init_memblock memblock_overlaps_region(struct memblock_type *type,
 	return i < type->cnt;
 }
 
+bool __init_memblock memblock_whole_node_crypto(int nid)
+{
+	struct memblock_region *region;
+
+	// TODO: this can be better,
+	// maybe an improvement is to use one the for_each_* macros
+	// isolating the node nid
+	for_each_mem_region(region) {
+		if ((memblock_get_region_node(region) == nid) &&
+		    !(region->flags & MEMBLOCK_CRYPTO))
+			return false;
+	}
+
+	return true;
+}
+
 /**
  * __memblock_find_range_bottom_up - find free area utility in bottom-up
  * @start: start of candidate range
@@ -899,25 +915,29 @@ static int __init_memblock memblock_setclr_flag(phys_addr_t base,
 	return 0;
 }
 
-// TODO: add the clear version and docs
+/**
+ * memblock_mark_crypto - Mark memory regions capable of hardware
+ * encryption with flag MEMBLOCK_CRYPTO.
+ * @base: the base phys addr of the region
+ * @size: the size of the region
+ *
+ * Return: 0 on success, -errno on failure.
+ */
 int __init_memblock memblock_mark_crypto(phys_addr_t base, phys_addr_t size)
 {
 	return memblock_setclr_flag(base, size, 1, MEMBLOCK_CRYPTO);
 }
 
-bool __init_memblock memblock_whole_node_crypto(int nid)
+/**
+ * memblock_clear_crypto - Clear flag MEMBLOCK_CRYPTO for a specified region.
+ * @base: the base phys addr of the region
+ * @size: the size of the region
+ *
+ * Return: 0 on success, -errno on failure.
+ */
+int __init_memblock memblock_clear_crypto(phys_addr_t base, phys_addr_t size)
 {
-	struct memblock_region *region;
-
-	// TODO: this can be better,
-	// maybe an improvement is use one the for_each_* macros
-	for_each_mem_region(region) {
-		if ((memblock_get_region_node(region) == nid) &&
-		    !(region->flags & MEMBLOCK_CRYPTO))
-			return false;
-	}
-
-	return true;
+	return memblock_setclr_flag(base, size, 0, MEMBLOCK_CRYPTO);
 }
 
 /**
