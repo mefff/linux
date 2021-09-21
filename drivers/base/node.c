@@ -673,16 +673,15 @@ static void node_device_release(struct device *dev)
 }
 
 #if defined(CONFIG_NUMA) && defined(CONFIG_EFI)
-// TODO: learn more about const
-static const struct attribute_group **select_attr_groups(bool cpu_local)
+static const struct attribute_group **select_attr_groups(struct node *node)
 {
-	if (cpu_local)
+	if (node->cpu_local)
 		return node_dev_crypto_groups;
 	else
 		return node_dev_groups;
 }
 #else
-static const struct attribute_group **select_attr_groups(bool cpu_local)
+static const struct attribute_group **select_attr_groups(struct node *node)
 {
 	return node_dev_groups;
 }
@@ -701,7 +700,7 @@ static int register_node(struct node *node, int num)
 	node->dev.id = num;
 	node->dev.bus = &node_subsys;
 	node->dev.release = node_device_release;
-	node->dev.groups = select_attr_groups(node->cpu_local);
+	node->dev.groups = select_attr_groups(node);
 
 	error = device_register(&node->dev);
 
@@ -1061,8 +1060,6 @@ int __register_one_node(int nid)
 	if (!node_devices[nid])
 		return -ENOMEM;
 
-	// TODO: move this to register_node
-	// ideally set_cpu_local should return the value of cpu_local
 	set_cpu_local(nid);
 
 	error = register_node(node_devices[nid], nid);
