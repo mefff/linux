@@ -176,12 +176,31 @@ static void __init __e820__range_add(struct e820_table *table, u64 start, u64 si
 	table->entries[x].addr = start;
 	table->entries[x].size = size;
 	table->entries[x].type = type;
+	table->entries[x].crypto = false;
 	table->nr_entries++;
 }
 
 void __init e820__range_add(u64 start, u64 size, enum e820_type type)
 {
 	__e820__range_add(e820_table, start, size, type);
+}
+
+void __init e820__mark_regions_as_crypto(u64 start, u64 size)
+{
+	// TODO: check the correct type of i
+	int i;
+	u64 end = start + size;
+
+	// TODO
+	pr_info("e820__mark_regions_as_crypto: Marking regions: start %llx | end %llx", start, end);
+	// TODO: giving that this regions are contiguous this for loop can be improved
+	for (i = 0; i < e820_table->nr_entries; i++) {
+		struct e820_entry *entry = &e820_table->entries[i];
+
+		if (entry->addr >= start && (entry->addr + entry->size) <= end) {
+			entry->crypto = true;
+		}
+	}
 }
 
 static void __init e820_print_type(enum e820_type type)
@@ -211,6 +230,7 @@ void __init e820__print_table(char *who)
 			e820_table->entries[i].addr + e820_table->entries[i].size - 1);
 
 		e820_print_type(e820_table->entries[i].type);
+		pr_cont(" %s", e820_table->entries[i].crypto ? "crypto" : "");
 		pr_cont("\n");
 	}
 }
@@ -327,6 +347,7 @@ int __init e820__update_table(struct e820_table *table)
 	unsigned long long last_addr;
 	u32 new_nr_entries, overlap_entries;
 	u32 i, chg_idx, chg_nr;
+	bool crypto;
 
 	/* If there's only one memory region, don't bother: */
 	if (table->nr_entries < 2)
@@ -406,9 +427,23 @@ int __init e820__update_table(struct e820_table *table)
 			if (current_type != 0)	{
 				new_entries[new_nr_entries].addr = change_point[chg_idx]->addr;
 				new_entries[new_nr_entries].type = current_type;
+				new_entries[new_nr_entries].crypto = crypto;
 				last_addr = change_point[chg_idx]->addr;
 			}
 			last_type = current_type;
+		} else if (current_type == last_type) {
+			// if 2 regions overlapped with different types
+			// for example:
+			// [0 - 100) RAM crypto
+			// [80 - 150) Reserved no-crypto
+			// there will be 2 regions
+			// [0 - 80) RAM crypto
+			// [80 - 150) Reserved crypto
+			// ie, this proiritize crypto, even if part of a region is
+			crypto = false;
+			for (i = 0; i < overlap_entries; i++) {
+				crypto = crypto || overlap_list[i]->crypto;
+			}
 		}
 	}
 
@@ -1308,6 +1343,7 @@ void __init e820__memblock_setup(void)
 	 */
 	memblock_allow_resize();
 
+	e820__print_table("memblock_setup");
 	for (i = 0; i < e820_table->nr_entries; i++) {
 		struct e820_entry *entry = &e820_table->entries[i];
 
@@ -1321,7 +1357,10 @@ void __init e820__memblock_setup(void)
 		if (entry->type != E820_TYPE_RAM && entry->type != E820_TYPE_RESERVED_KERN)
 			continue;
 
-		memblock_add(entry->addr, entry->size);
+		if (entry->crypto)
+			memblock_add_crypto(entry->addr, entry->size);
+		else
+			memblock_add(entry->addr, entry->size);
 	}
 
 	/* Throw away partial pages: */

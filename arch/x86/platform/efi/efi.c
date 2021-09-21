@@ -441,29 +441,47 @@ static int __init efi_config_init(const efi_config_table_type_t *arch_tables)
 	return ret;
 }
 
-enum efi_mem_crypto_t efi_mem_crypto = EFI_MEM_ENCRYPTION_NOT_CAPABLE;
-
 static void __init efi_set_mem_crypto(void)
 {
 	efi_memory_desc_t *md;
+	u64 start = 0, size = 0, last_start = 0, last_size = 0;
 
-	efi_mem_crypto = EFI_MEM_ENCRYPTION_CAPABLE;
-
+	e820__print_table("efi_set_mem_crypto before");
 	for_each_efi_memory_desc(md) {
-		switch (md->type) {
-		/* System memory after ExitBootServices */
-		case EFI_LOADER_CODE:
-		case EFI_LOADER_DATA:
-		case EFI_BOOT_SERVICES_CODE:
-		case EFI_BOOT_SERVICES_DATA:
-		case EFI_CONVENTIONAL_MEMORY:
-		case EFI_ACPI_RECLAIM_MEMORY:
-			if (!(md->attribute & EFI_MEMORY_CPU_CRYPTO)) {
-				efi_mem_crypto = EFI_MEM_ENCRYPTION_NOT_CAPABLE;
-				break;
+		u64 md_start = md->phys_addr;
+		u64 md_size = md->num_pages << EFI_PAGE_SHIFT;
+
+		// TODO
+		pr_info("start: %llx | size: %llx | md_start: %llx | md_size: %llx | last_start: %llx | last_size: %llx\n",
+			start, size, md_start, md_size, last_start, last_size);
+
+		if (!(md->attribute & EFI_MEMORY_CPU_CRYPTO)) {
+			/* contiguous regions */
+			if (last_start + last_size == md_start) {
+				if (size == 0)
+					start = md_start;
+
+				size += md_size;
+			} else {
+				e820__mark_regions_as_crypto(start, size);
+				start = md_start;
+				size = md_size;
 			}
+		} else {
+			if (size > 0)
+				e820__mark_regions_as_crypto(start, size);
+
+			size = 0;
 		}
+
+		last_start = md_start;
+		last_size = md_size;
 	}
+
+	if (size > 0)
+		e820__mark_regions_as_crypto(start, size);
+
+	e820__print_table("efi_set_mem_crypto after");
 }
 
 void __init efi_init(void)

@@ -695,6 +695,35 @@ int __init_memblock memblock_add(phys_addr_t base, phys_addr_t size)
 }
 
 /**
+ * memblock_add_crypto - add new memblock region capable of hardware
+ * encryption
+ * @base: base address of the new region
+ * @size: size of the new region
+ *
+ * Add new memblock region [@base, @base + @size) to the "memory" type
+ * and set the MEMBLOCK_CRYPTO flag. See memblock_add_range()
+ * description for mode details
+ *
+ * Return:
+ * 0 on success, -errno on failure.
+ */
+int __init_memblock memblock_add_crypto(phys_addr_t base, phys_addr_t size)
+{
+	phys_addr_t end = base + size - 1;
+	int error;
+
+	memblock_dbg("%s: [%pa-%pa] %pS\n", __func__,
+		     &base, &end, (void *)_RET_IP_);
+
+	// TODO: maybe I can add an error msg or something when failure
+	error = memblock_add_range(&memblock.memory, base, size, MAX_NUMNODES, 0);
+	if (error == 0)
+		error = memblock_mark_crypto(base, size);
+
+	return error;
+}
+
+/**
  * memblock_isolate_range - isolate given range into disjoint memblocks
  * @type: memblock type to isolate range for
  * @base: base of range to isolate
@@ -868,6 +897,27 @@ static int __init_memblock memblock_setclr_flag(phys_addr_t base,
 
 	memblock_merge_regions(type);
 	return 0;
+}
+
+// TODO: add the clear version and docs
+int __init_memblock memblock_mark_crypto(phys_addr_t base, phys_addr_t size)
+{
+	return memblock_setclr_flag(base, size, 1, MEMBLOCK_CRYPTO);
+}
+
+bool __init_memblock memblock_whole_node_crypto(int nid)
+{
+	struct memblock_region *region;
+
+	// TODO: this can be better,
+	// maybe an improvement is use one the for_each_* macros
+	for_each_mem_region(region) {
+		if ((memblock_get_region_node(region) == nid) &&
+		    !(region->flags & MEMBLOCK_CRYPTO))
+			return false;
+	}
+
+	return true;
 }
 
 /**

@@ -73,7 +73,8 @@ static BIN_ATTR_RO(cpulist, 0);
 static ssize_t crypto_capable_show(struct device *dev,
 				   struct device_attribute *attr, char *buf)
 {
-	return sysfs_emit(buf, "%d\n", efi_mem_crypto);
+	struct pglist_data *pgdat = NODE_DATA(dev->id);
+	return sysfs_emit(buf, "%d\n", pgdat->crypto_capable);
 }
 static DEVICE_ATTR_RO(crypto_capable);
 #endif
@@ -1060,6 +1061,8 @@ int __register_one_node(int nid)
 	if (!node_devices[nid])
 		return -ENOMEM;
 
+	// TODO: move this to register_node
+	// ideally set_cpu_local should return the value of cpu_local
 	set_cpu_local(nid);
 
 	error = register_node(node_devices[nid], nid);

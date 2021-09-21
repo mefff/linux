@@ -861,6 +861,9 @@ typedef struct pglist_data {
 	unsigned long		min_unmapped_pages;
 	unsigned long		min_slab_pages;
 #endif /* CONFIG_NUMA */
+#ifdef CONFIG_EFI
+	bool crypto_capable;
+#endif
 
 	/* Write-intensive fields used by page reclaim */
 	ZONE_PADDING(_pad1_)
