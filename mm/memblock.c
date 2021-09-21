@@ -731,9 +731,8 @@ int __init_memblock memblock_add_crypto(phys_addr_t base, phys_addr_t size)
 	memblock_dbg("%s: [%pa-%pa] %pS\n", __func__,
 		     &base, &end, (void *)_RET_IP_);
 
-	// TODO: maybe I can add an error msg or something when failure
 	error = memblock_add_range(&memblock.memory, base, size, MAX_NUMNODES, 0);
-	if (error == 0)
+	if (!error)
 		error = memblock_mark_crypto(base, size);
 
 	return error;
