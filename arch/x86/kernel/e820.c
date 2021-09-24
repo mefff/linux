@@ -192,18 +192,11 @@ void __init e820__mark_regions_as_crypto(u64 start, u64 size)
 
 	// TODO
 	pr_info("e820__mark_regions_as_crypto: Marking regions: start %llx | end %llx", start, end);
-	// TODO: Does the regions are always sorted and contiguous?
-	// Maybe I need to run an update_table first
 	for (i = 0; i < e820_table->nr_entries; i++) {
 		struct e820_entry *entry = &e820_table->entries[i];
 
-		if (entry->addr < start)
-			continue;
-
-		if (entry->addr + entry->size > end)
-			break;
-
-		entry->crypto = true;
+		if (entry->addr >= start && entry->addr + entry->size <= end)
+			entry->crypto = true;
 	}
 }
 
