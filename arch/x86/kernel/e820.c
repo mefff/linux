@@ -192,6 +192,8 @@ void __init e820__mark_regions_as_crypto(u64 start, u64 size)
 
 	// TODO
 	pr_info("e820__mark_regions_as_crypto: Marking regions: start %llx | end %llx", start, end);
+	// TODO: Does the regions are always sorted and contiguous?
+	// Maybe I need to run an update_table first
 	for (i = 0; i < e820_table->nr_entries; i++) {
 		struct e820_entry *entry = &e820_table->entries[i];
 
@@ -349,7 +351,7 @@ int __init e820__update_table(struct e820_table *table)
 	unsigned long long last_addr;
 	u32 new_nr_entries, overlap_entries;
 	u32 i, chg_idx, chg_nr;
-	bool crypto = false;
+	bool current_crypto, last_crypto = false;
 
 	/* If there's only one memory region, don't bother: */
 	if (table->nr_entries < 2)
@@ -411,13 +413,17 @@ int __init e820__update_table(struct e820_table *table)
 		 * 1=usable, 2,3,4,4+=unusable)
 		 */
 		current_type = 0;
+		current_crypto = false;
 		for (i = 0; i < overlap_entries; i++) {
+			current_crypto = current_crypto || overlap_list[i]->crypto;
 			if (overlap_list[i]->type > current_type)
 				current_type = overlap_list[i]->type;
 		}
 
 		/* Continue building up new map based on this information: */
-		if (current_type != last_type || e820_nomerge(current_type)) {
+		if (current_type != last_type ||
+		    current_crypto != last_crypto ||
+		    e820_nomerge(current_type)) {
 			if (last_type != 0)	 {
 				new_entries[new_nr_entries].size = change_point[chg_idx]->addr - last_addr;
 				/* Move forward only if the new size was non-zero: */
@@ -429,23 +435,12 @@ int __init e820__update_table(struct e820_table *table)
 			if (current_type != 0)	{
 				new_entries[new_nr_entries].addr = change_point[chg_idx]->addr;
 				new_entries[new_nr_entries].type = current_type;
-				new_entries[new_nr_entries].crypto = crypto;
+				new_entries[new_nr_entries].crypto = current_crypto;
+
+				last_crypto = current_crypto;
 				last_addr = change_point[chg_idx]->addr;
 			}
 			last_type = current_type;
-		} else if (current_type == last_type) {
-			// if 2 regions overlapped with different types
-			// for example:
-			// [0 - 100) RAM crypto
-			// [80 - 150) Reserved no-crypto
-			// there will be 2 regions
-			// [0 - 80) RAM crypto
-			// [80 - 150) Reserved crypto
-			// ie, this proiritize crypto, even if part of a region is
-			crypto = false;
-			for (i = 0; i < overlap_entries; i++) {
-				crypto = crypto || overlap_list[i]->crypto;
-			}
 		}
 	}
 
