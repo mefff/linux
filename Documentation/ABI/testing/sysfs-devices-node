@@ -3,9 +3,11 @@ Date:		September 2021
 Contact:	Martin Fernandez <martin.fernandez@eclypsium.com>
 Users:		fwupd
 Description:
-		This value is 1 if all system memory is marked with
-		EFI_MEMORY_CPU_CRYPTO, indicating that the system
-		memory is capable of being protected with the CPU’s
-		memory cryptographic capabilities. It is 0
+		This value is 1 if all system memory in this node is
+		marked with EFI_MEMORY_CPU_CRYPTO, indicating that the
+		system memory is capable of being protected with the
+		CPU’s memory cryptographic capabilities. It is 0
 		otherwise. This attribute will only be available if
 		node X is local.
+
+		TODO: I hate this "local"
