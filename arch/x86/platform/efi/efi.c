@@ -441,7 +441,7 @@ static int __init efi_config_init(const efi_config_table_type_t *arch_tables)
 	return ret;
 }
 
-static void __init efi_set_e820_regions_as_crypto(void)
+static void __init efi_set_e820_regions_as_crypto_capable(void)
 {
 	efi_memory_desc_t *md;
 	u64 start = 0, size = 0, last_start = 0, last_size = 0;
@@ -466,13 +466,13 @@ static void __init efi_set_e820_regions_as_crypto(void)
 
 				size += md_size;
 			} else {
-				e820__mark_regions_as_crypto(start, size);
+				e820__mark_regions_as_crypto_capable(start, size);
 				start = md_start;
 				size = md_size;
 			}
 		} else {
 			if (size > 0)
-				e820__mark_regions_as_crypto(start, size);
+				e820__mark_regions_as_crypto_capable(start, size);
 
 			size = 0;
 		}
@@ -483,7 +483,7 @@ static void __init efi_set_e820_regions_as_crypto(void)
 
 	// TODO: can I do something with this?
 	if (size > 0)
-		e820__mark_regions_as_crypto(start, size);
+		e820__mark_regions_as_crypto_capable(start, size);
 
 	e820__print_table("efi_set_mem_crypto after");
 }
@@ -541,7 +541,7 @@ void __init efi_init(void)
 	set_bit(EFI_RUNTIME_SERVICES, &efi.flags);
 	efi_clean_memmap();
 
-	efi_set_e820_regions_as_crypto();
+	efi_set_e820_regions_as_crypto_capable();
 
 	if (efi_enabled(EFI_DBG))
 		efi_print_memmap();

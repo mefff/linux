@@ -56,7 +56,7 @@ struct e820_entry {
 	u64			addr;
 	u64			size;
 	enum e820_type		type;
-	bool                    crypto;
+	bool			crypto_capable;
 } __attribute__((packed));
 
 /*

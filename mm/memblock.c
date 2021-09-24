@@ -191,7 +191,7 @@ bool __init_memblock memblock_overlaps_region(struct memblock_type *type,
 	return i < type->cnt;
 }
 
-bool __init_memblock memblock_whole_node_crypto(int nid)
+bool __init_memblock memblock_whole_node_crypto_capable(int nid)
 {
 	struct memblock_region *region;
 
@@ -200,7 +200,7 @@ bool __init_memblock memblock_whole_node_crypto(int nid)
 	// isolating the node nid
 	for_each_mem_region(region) {
 		if ((memblock_get_region_node(region) == nid) &&
-		    !(region->flags & MEMBLOCK_CRYPTO))
+		    !(region->flags & MEMBLOCK_CRYPTO_CAPABLE))
 			return false;
 	}
 
@@ -711,19 +711,20 @@ int __init_memblock memblock_add(phys_addr_t base, phys_addr_t size)
 }
 
 /**
- * memblock_add_crypto - add new memblock region capable of hardware
- * encryption
+ * memblock_add_crypto_capable - add new memblock region capable of
+ * hardware encryption
  * @base: base address of the new region
  * @size: size of the new region
  *
  * Add new memblock region [@base, @base + @size) to the "memory" type
- * and set the MEMBLOCK_CRYPTO flag. See memblock_add_range()
+ * and set the MEMBLOCK_CRYPTO_CAPABLE flag. See memblock_add_range()
  * description for mode details
  *
  * Return:
  * 0 on success, -errno on failure.
  */
-int __init_memblock memblock_add_crypto(phys_addr_t base, phys_addr_t size)
+int __init_memblock memblock_add_crypto_capable(phys_addr_t base,
+						phys_addr_t size)
 {
 	phys_addr_t end = base + size - 1;
 
@@ -731,7 +732,7 @@ int __init_memblock memblock_add_crypto(phys_addr_t base, phys_addr_t size)
 		     &base, &end, (void *)_RET_IP_);
 
 	return memblock_add_range(&memblock.memory, base, size, MAX_NUMNODES,
-				  MEMBLOCK_CRYPTO);
+				  MEMBLOCK_CRYPTO_CAPABLE);
 }
 
 /**
@@ -911,28 +912,31 @@ static int __init_memblock memblock_setclr_flag(phys_addr_t base,
 }
 
 /**
- * memblock_mark_crypto - Mark memory regions capable of hardware
- * encryption with flag MEMBLOCK_CRYPTO.
+ * memblock_mark_crypto_capable - Mark memory regions capable of hardware
+ * encryption with flag MEMBLOCK_CRYPTO_CAPABLE.
  * @base: the base phys addr of the region
  * @size: the size of the region
  *
  * Return: 0 on success, -errno on failure.
  */
-int __init_memblock memblock_mark_crypto(phys_addr_t base, phys_addr_t size)
+int __init_memblock memblock_mark_crypto_capable(phys_addr_t base,
+						 phys_addr_t size)
 {
-	return memblock_setclr_flag(base, size, 1, MEMBLOCK_CRYPTO);
+	return memblock_setclr_flag(base, size, 1, MEMBLOCK_CRYPTO_CAPABLE);
 }
 
 /**
- * memblock_clear_crypto - Clear flag MEMBLOCK_CRYPTO for a specified region.
+ * memblock_clear_crypto_capable - Clear flag MEMBLOCK_CRYPTO for a
+ * specified region.
  * @base: the base phys addr of the region
  * @size: the size of the region
  *
  * Return: 0 on success, -errno on failure.
  */
-int __init_memblock memblock_clear_crypto(phys_addr_t base, phys_addr_t size)
+int __init_memblock memblock_clear_crypto_capable(phys_addr_t base,
+						  phys_addr_t size)
 {
-	return memblock_setclr_flag(base, size, 0, MEMBLOCK_CRYPTO);
+	return memblock_setclr_flag(base, size, 0, MEMBLOCK_CRYPTO_CAPABLE);
 }
 
 /**

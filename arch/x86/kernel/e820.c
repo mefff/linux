@@ -176,7 +176,7 @@ static void __init __e820__range_add(struct e820_table *table, u64 start, u64 si
 	table->entries[x].addr = start;
 	table->entries[x].size = size;
 	table->entries[x].type = type;
-	table->entries[x].crypto = false;
+	table->entries[x].crypto_capable = false;
 	table->nr_entries++;
 }
 
@@ -185,7 +185,7 @@ void __init e820__range_add(u64 start, u64 size, enum e820_type type)
 	__e820__range_add(e820_table, start, size, type);
 }
 
-void __init e820__mark_regions_as_crypto(u64 start, u64 size)
+void __init e820__mark_regions_as_crypto_capable(u64 start, u64 size)
 {
 	u32 i;
 	u64 end = start + size;
@@ -196,7 +196,7 @@ void __init e820__mark_regions_as_crypto(u64 start, u64 size)
 		struct e820_entry *entry = &e820_table->entries[i];
 
 		if (entry->addr >= start && entry->addr + entry->size <= end)
-			entry->crypto = true;
+			entry->crypto_capable = true;
 	}
 }
 
@@ -227,7 +227,8 @@ void __init e820__print_table(char *who)
 			e820_table->entries[i].addr + e820_table->entries[i].size - 1);
 
 		e820_print_type(e820_table->entries[i].type);
-		pr_cont(" %s", e820_table->entries[i].crypto ? "crypto" : "");
+		pr_cont(" %s",
+			e820_table->entries[i].crypto_capable ? "crypto" : "");
 		pr_cont("\n");
 	}
 }
@@ -408,7 +409,7 @@ int __init e820__update_table(struct e820_table *table)
 		current_type = 0;
 		current_crypto = false;
 		for (i = 0; i < overlap_entries; i++) {
-			current_crypto = current_crypto || overlap_list[i]->crypto;
+			current_crypto = current_crypto || overlap_list[i]->crypto_capable;
 			if (overlap_list[i]->type > current_type)
 				current_type = overlap_list[i]->type;
 		}
@@ -428,7 +429,7 @@ int __init e820__update_table(struct e820_table *table)
 			if (current_type != 0)	{
 				new_entries[new_nr_entries].addr = change_point[chg_idx]->addr;
 				new_entries[new_nr_entries].type = current_type;
-				new_entries[new_nr_entries].crypto = current_crypto;
+				new_entries[new_nr_entries].crypto_capable = current_crypto;
 
 				last_crypto = current_crypto;
 				last_addr = change_point[chg_idx]->addr;
@@ -1347,8 +1348,8 @@ void __init e820__memblock_setup(void)
 		if (entry->type != E820_TYPE_RAM && entry->type != E820_TYPE_RESERVED_KERN)
 			continue;
 
-		if (entry->crypto)
-			memblock_add_crypto(entry->addr, entry->size);
+		if (entry->crypto_capable)
+			memblock_add_crypto_capable(entry->addr, entry->size);
 		else
 			memblock_add(entry->addr, entry->size);
 	}
