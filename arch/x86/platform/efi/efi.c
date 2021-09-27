@@ -441,50 +441,98 @@ static int __init efi_config_init(const efi_config_table_type_t *arch_tables)
 	return ret;
 }
 
+// TODO: document something about this
+struct contiguos_region {
+	u64 start, end;
+};
+
+static void __init contiguos_region_reset(struct contiguos_region *r)
+{
+	if (r) {
+		r->start = 0;
+		r->end = 0;
+	}
+}
+
+static struct contiguos_region __init efi_md_to_contigous_region(efi_memory_desc_t *md)
+{
+	struct contiguos_region r;
+	contiguos_region_reset(&r);
+	if (md) {
+		r.start = md->phys_addr;
+		r.end = md->phys_addr + (md->num_pages >> EFI_PAGE_SHIFT);
+	}
+
+	return r;
+}
+
+static u64 __init contiguos_region_size(struct contiguos_region r)
+{
+	return r.end - r.start;
+}
+
+static bool __init contiguos_region_merge_regions(struct contiguos_region *region1,
+						struct contiguos_region *region2)
+{
+	bool was_merged = false;
+
+	// TODO
+	pr_info("r1->start: %llx | r1->end: %llx | r2->start: %llx | r2->end: %llx | ",
+		region1->start, region1->end, region2->start, region2->end);
+
+	if (region1 && region2) {
+		if (contiguos_region_size(*region1) <= 0) {
+			region1 = region2;
+			was_merged = true;
+		} else if (region1->end == region2->start) {
+			region1->end = region2->end;
+			was_merged = true;
+		}
+	}
+
+	// TODO
+	pr_cont("merged: %d\n", was_merged);
+
+	return was_merged;
+}
+
+static void __init contiguos_region_mark_e820_regions(struct contiguos_region r)
+{
+	u64 size = contiguos_region_size(r);
+
+	if (size > 0) {
+		e820__mark_regions_as_crypto_capable(r.start, size);
+	}
+}
+
 static void __init efi_set_e820_regions_as_crypto_capable(void)
 {
 	efi_memory_desc_t *md;
-	u64 start = 0, size = 0, last_start = 0, last_size = 0;
+	struct contiguos_region *region = NULL, current_region;
 
+	// TODO
 	e820__print_table("efi_set_mem_crypto before");
-	// TODO: Why I don't care about the region types?
+	contiguos_region_reset(region);
 	for_each_efi_memory_desc(md) {
-		u64 md_start = md->phys_addr;
-		u64 md_size = md->num_pages << EFI_PAGE_SHIFT;
-
-		// TODO
-		pr_info("start: %llx | size: %llx | md_start: %llx | md_size: %llx | last_start: %llx | last_size: %llx\n",
-			start, size, md_start, md_size, last_start, last_size);
-
-		// TODO: this should be negated, but I use this for
-		// testing purpuses
+		if (region)
+			pr_info("region: %llx | %llx\n", region->start, region->end);
 		if (!(md->attribute & EFI_MEMORY_CPU_CRYPTO)) {
-			/* contiguous regions */
-			if (last_start + last_size == md_start) {
-				if (size == 0)
-					start = md_start;
+			current_region = efi_md_to_contigous_region(md);
 
-				size += md_size;
-			} else {
-				e820__mark_regions_as_crypto_capable(start, size);
-				start = md_start;
-				size = md_size;
+			if (!contiguos_region_merge_regions(region,
+							    &current_region)) {
+				contiguos_region_mark_e820_regions(*region);
+				region = &current_region;
 			}
 		} else {
-			if (size > 0)
-				e820__mark_regions_as_crypto_capable(start, size);
-
-			size = 0;
+			contiguos_region_mark_e820_regions(*region);
+			contiguos_region_reset(region);
 		}
-
-		last_start = md_start;
-		last_size = md_size;
 	}
 
-	// TODO: can I do something with this?
-	if (size > 0)
-		e820__mark_regions_as_crypto_capable(start, size);
+	contiguos_region_mark_e820_regions(*region);
 
+	// TODO
 	e820__print_table("efi_set_mem_crypto after");
 }
 
