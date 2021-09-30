@@ -5,6 +5,7 @@
 
 #include <linux/module.h>
 #include <linux/init.h>
+#include <linux/acpi.h>
 #include <linux/mm.h>
 #include <linux/memory.h>
 #include <linux/vmstat.h>
@@ -20,7 +21,6 @@
 #include <linux/pm_runtime.h>
 #include <linux/swap.h>
 #include <linux/slab.h>
-#include <linux/efi.h>
 
 static struct bus_type node_subsys = {
 	.name = "node",
@@ -69,7 +69,7 @@ static inline ssize_t cpulist_read(struct file *file, struct kobject *kobj,
 
 static BIN_ATTR_RO(cpulist, 0);
 
-#if defined(CONFIG_NUMA) && defined(CONFIG_EFI)
+#ifdef CONFIG_NUMA
 static ssize_t crypto_capable_show(struct device *dev,
 				   struct device_attribute *attr, char *buf)
 {
@@ -595,7 +595,7 @@ static const struct attribute_group *node_dev_groups[] = {
 	NULL
 };
 
-#if defined(CONFIG_NUMA) && defined(CONFIG_EFI)
+#ifdef CONFIG_NUMA
 static struct attribute *node_dev_crypto_attrs[] = {
 	&dev_attr_crypto_capable.attr,
 	NULL
@@ -672,7 +672,7 @@ static void node_device_release(struct device *dev)
 	kfree(node);
 }
 
-#if defined(CONFIG_NUMA) && defined(CONFIG_EFI)
+#ifdef CONFIG_NUMA
 static const struct attribute_group **select_attr_groups(struct node *node)
 {
 	if (node->cpu_local)
