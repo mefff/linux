@@ -33,6 +33,7 @@
 
 #include <linux/kernel.h>
 #include <linux/init.h>
+#include <linux/sort.h>
 #include <linux/efi.h>
 #include <linux/efi-bgrt.h>
 #include <linux/export.h>
@@ -45,6 +46,7 @@
 #include <linux/reboot.h>
 #include <linux/bcd.h>
 
+#include <asm/bug.h>
 #include <asm/setup.h>
 #include <asm/efi.h>
 #include <asm/e820/api.h>
@@ -441,99 +443,198 @@ static int __init efi_config_init(const efi_config_table_type_t *arch_tables)
 	return ret;
 }
 
-// TODO: document something about this
-struct contiguos_region {
+/* contiguos_region type is used to help
+ * efi_set_e820_regions_as_crypto_capable to its job, which is pick
+ * all the contiguous regions that have the EFI_MEMORY_CPU_CRYPTO
+ * attribute, and call a function of e820 module to mark those regions
+ * as being able to do hardware encryption.
+ *
+ * To use this properly the
+ * memory map should not have regions overlapped and the regions
+ * should be sorted.
+ */
+struct contiguous_region {
 	u64 start, end;
 };
 
-static void __init contiguos_region_reset(struct contiguos_region *r)
+enum contiguous_region_error {
+	CONTIGUOUS_REGION_MERGED,
+	CONTIGUOUS_REGION_DIDNT_MERGE,
+	CONTIGUOUS_REGION_ERROR_MERGING,
+};
+
+static struct contiguous_region __init contiguous_region_new_region(void)
 {
-	if (r) {
-		r->start = 0;
-		r->end = 0;
-	}
+	struct contiguous_region r = { 0, 0 };
+	return r;
 }
 
-static struct contiguos_region __init efi_md_to_contigous_region(efi_memory_desc_t *md)
+static struct contiguous_region __init
+efi_md_to_contigous_region(efi_memory_desc_t *md)
 {
-	struct contiguos_region r;
-	contiguos_region_reset(&r);
+	struct contiguous_region r;
 	if (md) {
 		r.start = md->phys_addr;
-		r.end = md->phys_addr + (md->num_pages >> EFI_PAGE_SHIFT);
+		r.end = md->phys_addr + (md->num_pages << EFI_PAGE_SHIFT) - 1;
+	} else {
+		WARN_ON(true);
+		r = contiguous_region_new_region();
 	}
 
 	return r;
 }
 
-static u64 __init contiguos_region_size(struct contiguos_region r)
+static u64 __init contiguous_region_size(struct contiguous_region r)
 {
-	return r.end - r.start;
+	return r.end - r.start + 1;
 }
 
-static bool __init contiguos_region_merge_regions(struct contiguos_region *region1,
-						struct contiguos_region *region2)
+static void __init contiguous_region_swap(struct contiguous_region *region1,
+					  struct contiguous_region region2)
 {
-	bool was_merged = false;
-
-	// TODO
-	pr_info("r1->start: %llx | r1->end: %llx | r2->start: %llx | r2->end: %llx | ",
-		region1->start, region1->end, region2->start, region2->end);
-
-	if (region1 && region2) {
-		if (contiguos_region_size(*region1) <= 0) {
-			region1 = region2;
-			was_merged = true;
-		} else if (region1->end == region2->start) {
-			region1->end = region2->end;
-			was_merged = true;
-		}
+	if (region1) {
+		region1->start = region2.start;
+		region1->end = region2.end;
+	} else {
+		WARN_ON(true);
 	}
+}
 
-	// TODO
-	pr_cont("merged: %d\n", was_merged);
+static bool __init contiguous_region_overlapped_regions(
+	struct contiguous_region r1, struct contiguous_region r2)
+{
+	if (r1.start < r2.start) {
+		return r2.start <= r1.end;
+	} else if (r2.start < r1.start) {
+		return r1.start <= r2.end;
+	} else {
+		/* if one region is "empty" it does not overlap */
+		return !((contiguous_region_size(r1) <= 1) ||
+			 (contiguous_region_size(r2) <= 1));
+	}
+}
+
+static enum contiguous_region_error __init contiguous_region_merge_regions(
+	struct contiguous_region *region1, struct contiguous_region region2)
+{
+	enum contiguous_region_error was_merged = CONTIGUOUS_REGION_DIDNT_MERGE;
+
+	// TODO: remove when working
+	pr_info("contiguous_region_merge: [0x%016llx-0x%016llx] and [0x%016llx-0x%016llx]\n",
+		region1->start, region1->end, region2.start, region2.end);
+
+	if (region1) {
+		if (contiguous_region_size(*region1) <= 1) {
+			pr_info("swapping!\n");
+			contiguous_region_swap(region1, region2);
+			was_merged = CONTIGUOUS_REGION_MERGED;
+		} else if (region1->end + 1 == region2.start) {
+			pr_info("extending!\n");
+			region1->end = region2.end;
+			was_merged = CONTIGUOUS_REGION_MERGED;
+		}
+	} else {
+		WARN_ON(true);
+		was_merged = CONTIGUOUS_REGION_ERROR_MERGING;
+	}
 
 	return was_merged;
 }
 
-static void __init contiguos_region_mark_e820_regions(struct contiguos_region r)
+static enum contiguous_region_error __init contiguous_region_try_merge_regions(
+	struct contiguous_region *region1, struct contiguous_region region2)
 {
-	u64 size = contiguos_region_size(r);
+	enum contiguous_region_error was_merged = CONTIGUOUS_REGION_DIDNT_MERGE;
 
-	if (size > 0) {
-		e820__mark_regions_as_crypto_capable(r.start, size);
+	if (region1) {
+		if (!contiguous_region_overlapped_regions(*region1, region2)) {
+			was_merged = contiguous_region_merge_regions(region1,
+								     region2);
+		} else {
+			WARN_ON(true);
+			pr_info("efi: EFI memory descriptors overlap\n");
+			pr_info("    [0x%016llx-0x%016llx]\n", region1->start, region1->end);
+			pr_info("and [0x%016llx-0x%016llx]\n", region2.start, region2.end);
+			was_merged = CONTIGUOUS_REGION_ERROR_MERGING;
+		}
 	}
+
+	// TODO: remove when working
+	pr_info("merged: %d\n", was_merged);
+
+	return was_merged;
+}
+
+static void __init
+contiguous_region_mark_e820_regions(struct contiguous_region r)
+{
+	u64 size = contiguous_region_size(r);
+	// TODO: remove when working
+	pr_info("Trying to mark: start %llx (%llu) | end: %llx | size %llu...",
+		r.start, r.start, r.end, size);
+
+	if (size > 1) {
+		e820__mark_regions_as_crypto_capable(r.start, size);
+		pr_cont("DONE");
+	}
+	pr_cont("\n");
 }
 
 static void __init efi_set_e820_regions_as_crypto_capable(void)
 {
 	efi_memory_desc_t *md;
-	struct contiguos_region *region = NULL, current_region;
+	struct contiguous_region region, current_region;
 
-	// TODO
-	e820__print_table("efi_set_mem_crypto before");
-	contiguos_region_reset(region);
-	for_each_efi_memory_desc(md) {
-		if (region)
-			pr_info("region: %llx | %llx\n", region->start, region->end);
+	region = contiguous_region_new_region();
+	for_each_efi_memory_desc (md) {
+		int was_merged;
+		char buf[64];
+
+		// TODO: remove when working
+		pr_info("%s range=[0x%016llx-0x%016llx] (%lluMB)\n",
+			efi_md_typeattr_format(buf, sizeof(buf), md),
+			md->phys_addr,
+			md->phys_addr + (md->num_pages << EFI_PAGE_SHIFT) - 1,
+			(md->num_pages >> (20 - EFI_PAGE_SHIFT)));
+
+		// TODO: This is negated only for testing porpuses
 		if (!(md->attribute & EFI_MEMORY_CPU_CRYPTO)) {
 			current_region = efi_md_to_contigous_region(md);
 
-			if (!contiguos_region_merge_regions(region,
-							    &current_region)) {
-				contiguos_region_mark_e820_regions(*region);
-				region = &current_region;
+			was_merged = contiguous_region_try_merge_regions(
+				&region, current_region);
+			if (was_merged == CONTIGUOUS_REGION_DIDNT_MERGE) {
+				contiguous_region_mark_e820_regions(region);
+				region = current_region;
+			} else if (was_merged == CONTIGUOUS_REGION_ERROR_MERGING) {
+				break;
 			}
 		} else {
-			contiguos_region_mark_e820_regions(*region);
-			contiguos_region_reset(region);
+			contiguous_region_mark_e820_regions(region);
+
+			region = contiguous_region_new_region();
 		}
 	}
 
-	contiguos_region_mark_e820_regions(*region);
+	contiguous_region_mark_e820_regions(region);
+}
 
-	// TODO
-	e820__print_table("efi_set_mem_crypto after");
+/* Function to compare efi_memory_desc_t
+ * It only compares the start address of the region, so it's not
+ * suitable to compare intersected regions
+ */
+int __init efi_cmp_memory_desc(const void *a, const void *b)
+{
+	const efi_memory_desc_t *mda = a;
+	const efi_memory_desc_t *mdb = b;
+
+	if (mda->phys_addr < mdb->phys_addr) {
+		return -1;
+	} else if (mda->phys_addr > mdb->phys_addr) {
+		return 1;
+	} else {
+		return 0;
+	}
 }
 
 void __init efi_init(void)
@@ -589,6 +690,10 @@ void __init efi_init(void)
 	set_bit(EFI_RUNTIME_SERVICES, &efi.flags);
 	efi_clean_memmap();
 
+	// TODO
+	efi_print_memmap();
+	sort(efi.memmap.map, efi.memmap.nr_map, efi.memmap.desc_size, efi_cmp_memory_desc,
+	     NULL);
 	efi_set_e820_regions_as_crypto_capable();
 
 	if (efi_enabled(EFI_DBG))
