@@ -92,9 +92,7 @@ struct node {
 	struct list_head cache_attrs;
 	struct device *cache_dev;
 #endif
-#ifdef CONFIG_NUMA
 	bool cpu_local;
-#endif
 };
 
 struct memory_block;

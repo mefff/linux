@@ -69,7 +69,6 @@ static inline ssize_t cpulist_read(struct file *file, struct kobject *kobj,
 
 static BIN_ATTR_RO(cpulist, 0);
 
-#ifdef CONFIG_NUMA
 static ssize_t crypto_capable_show(struct device *dev,
 				   struct device_attribute *attr, char *buf)
 {
@@ -77,7 +76,6 @@ static ssize_t crypto_capable_show(struct device *dev,
 	return sysfs_emit(buf, "%d\n", pgdat->crypto_capable);
 }
 static DEVICE_ATTR_RO(crypto_capable);
-#endif
 
 /**
  * struct node_access_nodes - Access class device to hold user visible
@@ -1030,7 +1028,10 @@ static void set_cpu_local(int nid)
 	node_devices[nid]->cpu_local = cpu_local;
 }
 #else
-#define set_cpu_local(nid)
+static void set_cpu_local(nid)
+{
+	node_devices[nid]->cpu_local = true;
+}
 #endif /* CONFIG_NUMA */
 
 int __register_one_node(int nid)
