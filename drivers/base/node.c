@@ -571,11 +571,26 @@ static ssize_t node_read_distance(struct device *dev,
 }
 static DEVICE_ATTR(distance, 0444, node_read_distance, NULL);
 
+static umode_t node_attr_is_visible(struct kobject *kobj,
+				    struct attribute *attr, int n)
+{
+	if (attr == &dev_attr_crypto_capable.attr) {
+		struct device *dev = container_of(kobj, struct device, kobj);
+		int nid = dev->id;
+		if (!node_devices[nid]->cpu_local) {
+			return 0;
+		}
+	}
+
+	return attr->mode;
+}
+
 static struct attribute *node_dev_attrs[] = {
 	&dev_attr_meminfo.attr,
 	&dev_attr_numastat.attr,
 	&dev_attr_distance.attr,
 	&dev_attr_vmstat.attr,
+	&dev_attr_crypto_capable.attr,
 	NULL
 };
 
@@ -587,30 +602,14 @@ static struct bin_attribute *node_dev_bin_attrs[] = {
 
 static const struct attribute_group node_dev_group = {
 	.attrs = node_dev_attrs,
-	.bin_attrs = node_dev_bin_attrs
+	.bin_attrs = node_dev_bin_attrs,
+	.is_visible = node_attr_is_visible,
 };
 
 static const struct attribute_group *node_dev_groups[] = {
 	&node_dev_group,
 	NULL
 };
-
-#ifdef CONFIG_NUMA
-static struct attribute *node_dev_crypto_attrs[] = {
-	&dev_attr_crypto_capable.attr,
-	NULL
-};
-
-static const struct attribute_group node_dev_crypto_group = {
-	.attrs = node_dev_crypto_attrs,
-};
-
-static const struct attribute_group *node_dev_crypto_groups[] = {
-	&node_dev_group,
-	&node_dev_crypto_group,
-	NULL
-};
-#endif
 
 #ifdef CONFIG_HUGETLBFS
 /*
@@ -672,21 +671,6 @@ static void node_device_release(struct device *dev)
 	kfree(node);
 }
 
-#ifdef CONFIG_NUMA
-static const struct attribute_group **select_attr_groups(struct node *node)
-{
-	if (node->cpu_local)
-		return node_dev_crypto_groups;
-	else
-		return node_dev_groups;
-}
-#else
-static const struct attribute_group **select_attr_groups(struct node *node)
-{
-	return node_dev_groups;
-}
-#endif
-
 /*
  * register_node - Setup a sysfs device for a node.
  * @num - Node number to use when creating the device.
@@ -700,7 +684,7 @@ static int register_node(struct node *node, int num)
 	node->dev.id = num;
 	node->dev.bus = &node_subsys;
 	node->dev.release = node_device_release;
-	node->dev.groups = select_attr_groups(node);
+	node->dev.groups = node_dev_groups;
 
 	error = device_register(&node->dev);
 
