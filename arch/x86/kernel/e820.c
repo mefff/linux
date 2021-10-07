@@ -227,7 +227,7 @@ void __init e820__print_table(char *who)
 			e820_table->entries[i].addr + e820_table->entries[i].size - 1);
 
 		e820_print_type(e820_table->entries[i].type);
-		pr_cont(" %s",
+		pr_cont("; %s",
 			e820_table->entries[i].crypto_capable ? "crypto" : "");
 		pr_cont("\n");
 	}
