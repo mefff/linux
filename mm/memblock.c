@@ -191,13 +191,18 @@ bool __init_memblock memblock_overlaps_region(struct memblock_type *type,
 	return i < type->cnt;
 }
 
+/**
+ * memblock_whole_node_crypto_capable - get if whole node is capable
+ * of encryption
+ * @nid: number of node
+ *
+ * Iterate over all memory type and find if all regions under node
+ * @nid are capable of hardware encryption.
+ */
 bool __init_memblock memblock_whole_node_crypto_capable(int nid)
 {
 	struct memblock_region *region;
 
-	// TODO: this can be better,
-	// maybe an improvement is to use one the for_each_* macros
-	// isolating the node nid
 	for_each_mem_region(region) {
 		if ((memblock_get_region_node(region) == nid) &&
 		    !(region->flags & MEMBLOCK_CRYPTO_CAPABLE))
