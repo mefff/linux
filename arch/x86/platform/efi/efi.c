@@ -514,8 +514,9 @@ static bool __init contiguous_region_overlapped_regions(struct contiguous_region
 	}
 }
 
-static enum contiguous_region_error __init contiguous_region_merge_regions(struct contiguous_region *region1,
-									struct contiguous_region region2)
+static enum contiguous_region_error
+__init contiguous_region_merge_regions(struct contiguous_region *region1,
+				struct contiguous_region region2)
 {
 	enum contiguous_region_error was_merged = CONTIGUOUS_REGION_DIDNT_MERGE;
 
@@ -541,8 +542,9 @@ static enum contiguous_region_error __init contiguous_region_merge_regions(struc
 	return was_merged;
 }
 
-static enum contiguous_region_error __init contiguous_region_try_merge_regions(struct contiguous_region *region1,
-									struct contiguous_region region2)
+static enum contiguous_region_error
+__init contiguous_region_try_merge_regions(struct contiguous_region *region1,
+					struct contiguous_region region2)
 {
 	enum contiguous_region_error was_merged = CONTIGUOUS_REGION_DIDNT_MERGE;
 
