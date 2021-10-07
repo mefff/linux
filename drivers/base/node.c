@@ -69,14 +69,6 @@ static inline ssize_t cpulist_read(struct file *file, struct kobject *kobj,
 
 static BIN_ATTR_RO(cpulist, 0);
 
-static ssize_t crypto_capable_show(struct device *dev,
-				   struct device_attribute *attr, char *buf)
-{
-	struct pglist_data *pgdat = NODE_DATA(dev->id);
-	return sysfs_emit(buf, "%d\n", pgdat->crypto_capable);
-}
-static DEVICE_ATTR_RO(crypto_capable);
-
 /**
  * struct node_access_nodes - Access class device to hold user visible
  * 			      relationships to other nodes.
@@ -569,15 +561,24 @@ static ssize_t node_read_distance(struct device *dev,
 }
 static DEVICE_ATTR(distance, 0444, node_read_distance, NULL);
 
+static ssize_t crypto_capable_show(struct device *dev,
+				   struct device_attribute *attr, char *buf)
+{
+	struct pglist_data *pgdat = NODE_DATA(dev->id);
+
+	return sysfs_emit(buf, "%d\n", pgdat->crypto_capable);
+}
+static DEVICE_ATTR_RO(crypto_capable);
+
 static umode_t node_attr_is_visible(struct kobject *kobj,
 				    struct attribute *attr, int n)
 {
 	if (attr == &dev_attr_crypto_capable.attr) {
 		struct device *dev = container_of(kobj, struct device, kobj);
 		int nid = dev->id;
-		if (!node_devices[nid]->cpu_local) {
+
+		if (!node_devices[nid]->cpu_local)
 			return 0;
-		}
 	}
 
 	return attr->mode;

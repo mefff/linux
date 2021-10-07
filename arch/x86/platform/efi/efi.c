@@ -469,10 +469,10 @@ static struct contiguous_region __init contiguous_region_new_region(void)
 	return r;
 }
 
-static struct contiguous_region __init
-efi_md_to_contigous_region(efi_memory_desc_t *md)
+static struct contiguous_region __init efi_md_to_contigous_region(efi_memory_desc_t *md)
 {
 	struct contiguous_region r;
+
 	if (md) {
 		r.start = md->phys_addr;
 		r.end = md->phys_addr + (md->num_pages << EFI_PAGE_SHIFT) - 1;
@@ -500,8 +500,8 @@ static void __init contiguous_region_swap(struct contiguous_region *region1,
 	}
 }
 
-static bool __init contiguous_region_overlapped_regions(
-	struct contiguous_region r1, struct contiguous_region r2)
+static bool __init contiguous_region_overlapped_regions(struct contiguous_region r1,
+							struct contiguous_region r2)
 {
 	if (r1.start < r2.start) {
 		return r2.start <= r1.end;
@@ -514,8 +514,8 @@ static bool __init contiguous_region_overlapped_regions(
 	}
 }
 
-static enum contiguous_region_error __init contiguous_region_merge_regions(
-	struct contiguous_region *region1, struct contiguous_region region2)
+static enum contiguous_region_error __init contiguous_region_merge_regions(struct contiguous_region *region1,
+									struct contiguous_region region2)
 {
 	enum contiguous_region_error was_merged = CONTIGUOUS_REGION_DIDNT_MERGE;
 
@@ -541,8 +541,8 @@ static enum contiguous_region_error __init contiguous_region_merge_regions(
 	return was_merged;
 }
 
-static enum contiguous_region_error __init contiguous_region_try_merge_regions(
-	struct contiguous_region *region1, struct contiguous_region region2)
+static enum contiguous_region_error __init contiguous_region_try_merge_regions(struct contiguous_region *region1,
+									struct contiguous_region region2)
 {
 	enum contiguous_region_error was_merged = CONTIGUOUS_REGION_DIDNT_MERGE;
 
@@ -565,8 +565,7 @@ static enum contiguous_region_error __init contiguous_region_try_merge_regions(
 	return was_merged;
 }
 
-static void __init
-contiguous_region_mark_e820_regions(struct contiguous_region r)
+static void __init contiguous_region_mark_e820_regions(struct contiguous_region r)
 {
 	u64 size = contiguous_region_size(r);
 	// TODO: remove when working
@@ -586,7 +585,7 @@ static void __init efi_set_e820_regions_as_crypto_capable(void)
 	struct contiguous_region region, current_region;
 
 	region = contiguous_region_new_region();
-	for_each_efi_memory_desc (md) {
+	for_each_efi_memory_desc(md) {
 		int was_merged;
 		char buf[64];
 
@@ -601,8 +600,8 @@ static void __init efi_set_e820_regions_as_crypto_capable(void)
 		if (!(md->attribute & EFI_MEMORY_CPU_CRYPTO)) {
 			current_region = efi_md_to_contigous_region(md);
 
-			was_merged = contiguous_region_try_merge_regions(
-				&region, current_region);
+			was_merged = contiguous_region_try_merge_regions(&region,
+									 current_region);
 			if (was_merged == CONTIGUOUS_REGION_DIDNT_MERGE) {
 				contiguous_region_mark_e820_regions(region);
 				region = current_region;
@@ -619,7 +618,8 @@ static void __init efi_set_e820_regions_as_crypto_capable(void)
 	contiguous_region_mark_e820_regions(region);
 }
 
-/* Function to compare efi_memory_desc_t
+/*
+ * Function to compare efi_memory_desc_t
  * It only compares the start address of the region, so it's not
  * suitable to compare intersected regions
  */
