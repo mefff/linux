@@ -8,6 +8,5 @@ Description:
 		system memory is capable of being protected with the
 		CPU’s memory cryptographic capabilities. It is 0
 		otherwise. This attribute will only be available if
-		node X is local.
-
-		TODO: I hate this "local"
+		node X is in ACPI's SRAT table or it's an emulated
+		node.
