@@ -520,17 +520,11 @@ __init contiguous_region_merge_regions(struct contiguous_region *region1,
 {
 	enum contiguous_region_error was_merged = CONTIGUOUS_REGION_DIDNT_MERGE;
 
-	// TODO: remove when working
-	pr_info("contiguous_region_merge: [0x%016llx-0x%016llx] and [0x%016llx-0x%016llx]\n",
-		region1->start, region1->end, region2.start, region2.end);
-
 	if (region1) {
 		if (contiguous_region_size(*region1) <= 1) {
-			pr_info("swapping!\n");
 			contiguous_region_swap(region1, region2);
 			was_merged = CONTIGUOUS_REGION_MERGED;
 		} else if (region1->end + 1 == region2.start) {
-			pr_info("extending!\n");
 			region1->end = region2.end;
 			was_merged = CONTIGUOUS_REGION_MERGED;
 		}
@@ -561,24 +555,16 @@ __init contiguous_region_try_merge_regions(struct contiguous_region *region1,
 		}
 	}
 
-	// TODO: remove when working
-	pr_info("merged: %d\n", was_merged);
-
 	return was_merged;
 }
 
 static void __init contiguous_region_mark_e820_regions(struct contiguous_region r)
 {
 	u64 size = contiguous_region_size(r);
-	// TODO: remove when working
-	pr_info("Trying to mark: start %llx (%llu) | end: %llx | size %llu...",
-		r.start, r.start, r.end, size);
 
 	if (size > 1) {
 		e820__mark_regions_as_crypto_capable(r.start, size);
-		pr_cont("DONE");
 	}
-	pr_cont("\n");
 }
 
 static void __init efi_set_e820_regions_as_crypto_capable(void)
@@ -589,14 +575,6 @@ static void __init efi_set_e820_regions_as_crypto_capable(void)
 	region = contiguous_region_new_region();
 	for_each_efi_memory_desc(md) {
 		int was_merged;
-		char buf[64];
-
-		// TODO: remove when working
-		pr_info("%s range=[0x%016llx-0x%016llx] (%lluMB)\n",
-			efi_md_typeattr_format(buf, sizeof(buf), md),
-			md->phys_addr,
-			md->phys_addr + (md->num_pages << EFI_PAGE_SHIFT) - 1,
-			(md->num_pages >> (20 - EFI_PAGE_SHIFT)));
 
 		// TODO: This is negated only for testing porpuses
 		if (!(md->attribute & EFI_MEMORY_CPU_CRYPTO)) {
@@ -692,8 +670,6 @@ void __init efi_init(void)
 	set_bit(EFI_RUNTIME_SERVICES, &efi.flags);
 	efi_clean_memmap();
 
-	// TODO
-	efi_print_memmap();
 	sort(efi.memmap.map, efi.memmap.nr_map, efi.memmap.desc_size, efi_cmp_memory_desc,
 	     NULL);
 	efi_set_e820_regions_as_crypto_capable();

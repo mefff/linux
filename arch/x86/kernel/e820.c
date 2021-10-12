@@ -190,8 +190,6 @@ void __init e820__mark_regions_as_crypto_capable(u64 start, u64 size)
 	u32 i;
 	u64 end = start + size;
 
-	// TODO
-	pr_info("e820__mark_regions_as_crypto: Marking regions: start %llx | end %llx", start, end);
 	for (i = 0; i < e820_table->nr_entries; i++) {
 		struct e820_entry *entry = &e820_table->entries[i];
 
@@ -1334,7 +1332,6 @@ void __init e820__memblock_setup(void)
 	 */
 	memblock_allow_resize();
 
-	e820__print_table("memblock_setup");
 	for (i = 0; i < e820_table->nr_entries; i++) {
 		struct e820_entry *entry = &e820_table->entries[i];
 
