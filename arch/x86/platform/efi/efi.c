@@ -472,7 +472,7 @@ static struct contiguous_region __init efi_md_to_contigous_region(efi_memory_des
 {
 	struct contiguous_region r;
 
-	if (md) {
+	if (md != NULL) {
 		r.start = md->phys_addr;
 		r.end = md->phys_addr + (md->num_pages << EFI_PAGE_SHIFT) - 1;
 	} else {
@@ -491,7 +491,7 @@ static u64 __init contiguous_region_size(struct contiguous_region r)
 static void __init contiguous_region_swap(struct contiguous_region *region1,
 					  struct contiguous_region region2)
 {
-	if (region1) {
+	if (region1 != NULL) {
 		region1->start = region2.start;
 		region1->end = region2.end;
 	} else {
@@ -519,7 +519,7 @@ __init contiguous_region_merge_regions(struct contiguous_region *region1,
 {
 	enum contiguous_region_error was_merged = CONTIGUOUS_REGION_DIDNT_MERGE;
 
-	if (region1) {
+	if (region1 != NULL) {
 		if (contiguous_region_size(*region1) <= 1) {
 			contiguous_region_swap(region1, region2);
 			was_merged = CONTIGUOUS_REGION_MERGED;
@@ -541,7 +541,7 @@ __init contiguous_region_try_merge_regions(struct contiguous_region *region1,
 {
 	enum contiguous_region_error was_merged = CONTIGUOUS_REGION_DIDNT_MERGE;
 
-	if (region1) {
+	if (region1 != NULL) {
 		if (!contiguous_region_overlapped_regions(*region1, region2)) {
 			was_merged = contiguous_region_merge_regions(region1,
 								     region2);
