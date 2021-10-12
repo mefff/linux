@@ -114,7 +114,7 @@ int memblock_physmem_add(phys_addr_t base, phys_addr_t size);
 void memblock_trim_memory(phys_addr_t align);
 bool memblock_overlaps_region(struct memblock_type *type,
 			      phys_addr_t base, phys_addr_t size);
-bool memblock_whole_node_crypto_capable(int nid);
+bool memblock_node_is_crypto_capable(int nid);
 int memblock_mark_crypto_capable(phys_addr_t base, phys_addr_t size);
 int memblock_clear_crypto_capable(phys_addr_t base, phys_addr_t size);
 int memblock_mark_hotplug(phys_addr_t base, phys_addr_t size);
