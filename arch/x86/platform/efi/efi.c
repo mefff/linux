@@ -443,15 +443,14 @@ static int __init efi_config_init(const efi_config_table_type_t *arch_tables)
 	return ret;
 }
 
-/* contiguos_region type is used to help
- * efi_set_e820_regions_as_crypto_capable to its job, which is pick
- * all the contiguous regions that have the EFI_MEMORY_CPU_CRYPTO
- * attribute, and call a function of e820 module to mark those regions
- * as being able to do hardware encryption.
+/* The contiguos_region type is used to help
+ * efi_set_e820_regions_as_crypto_capable to pick all the contiguous
+ * regions that have the EFI_MEMORY_CPU_CRYPTO attribute, and call a
+ * function of the e820 module to mark those regions as being able to
+ * do hardware encryption.
  *
- * To use this properly the
- * memory map should not have regions overlapped and the regions
- * should be sorted.
+ * To use this properly the memory map must not have any overlapped
+ * regions and the regions should be sorted.
  */
 struct contiguous_region {
 	u64 start, end;
