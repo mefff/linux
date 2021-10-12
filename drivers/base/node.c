@@ -687,7 +687,6 @@ static int register_node(struct node *node, int num)
 	node->dev.bus = &node_subsys;
 	node->dev.release = node_device_release;
 	node->dev.groups = node_dev_groups;
-
 	error = device_register(&node->dev);
 
 	if (error)
