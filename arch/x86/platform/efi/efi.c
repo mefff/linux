@@ -459,7 +459,7 @@ struct contiguous_region {
 enum contiguous_region_error {
 	CONTIGUOUS_REGION_MERGED,
 	CONTIGUOUS_REGION_DIDNT_MERGE,
-	CONTIGUOUS_REGION_ERROR_MERGING,
+	CONTIGUOUS_REGION_ERROR_MERGING
 };
 
 static struct contiguous_region __init contiguous_region_new_region(void)
