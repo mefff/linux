@@ -1019,7 +1019,10 @@ static void set_cpu_local(int nid)
 	const int real_nid = get_real_nid(nid);
 	bool cpu_local;
 
-	/* If we have the SRAT tables available we need to check those */
+	/*
+	 * If we have the SRAT table available we need to check it
+	 * otherwise it's enough to check if real_nid is 0
+	 */
 #ifdef CONFIG_ACPI_NUMA
 	cpu_local =
 		dummy_numa ? real_nid == 0 : node_to_pxm(real_nid) != PXM_INVAL;
