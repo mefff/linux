@@ -1012,7 +1012,7 @@ static int get_real_nid(int nid)
 {
 	return nid;
 }
-#endif
+#endif /* CONFIG_NUMA_EMU */
 
 static void set_cpu_local(int nid)
 {
