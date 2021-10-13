@@ -1016,10 +1016,8 @@ static int get_real_nid(int nid)
 
 static void set_cpu_local(int nid)
 {
-	int real_nid;
+	const int real_nid = get_real_nid(nid);
 	bool cpu_local;
-
-	real_nid = get_real_nid(nid);
 
 #ifdef CONFIG_ACPI_NUMA
 	cpu_local =
