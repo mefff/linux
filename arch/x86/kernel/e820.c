@@ -225,8 +225,8 @@ void __init e820__print_table(char *who)
 			e820_table->entries[i].addr + e820_table->entries[i].size - 1);
 
 		e820_print_type(e820_table->entries[i].type);
-		pr_cont("; %s",
-			e820_table->entries[i].crypto_capable ? "crypto" : "");
+		pr_cont("%s",
+			e820_table->entries[i].crypto_capable ? "; crypto-capable" : "");
 		pr_cont("\n");
 	}
 }
@@ -343,7 +343,8 @@ int __init e820__update_table(struct e820_table *table)
 	unsigned long long last_addr;
 	u32 new_nr_entries, overlap_entries;
 	u32 i, chg_idx, chg_nr;
-	bool current_crypto, last_crypto = false;
+	bool current_crypto;
+	bool last_crypto = false;
 
 	/* If there's only one memory region, don't bother: */
 	if (table->nr_entries < 2)
