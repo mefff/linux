@@ -23,10 +23,10 @@ extern int numa_off;
 extern int emu_nid_to_phys[];
 
 /*
- * dummy_numa indicates wheter we used dummy_numa_init for
+ * used_dummy_numa_init indicates whether we used dummy_numa_init for
  * initialization or not
  */
-extern bool dummy_numa;
+extern bool used_dummy_numa_init;
 
 /*
  * __apicid_to_node[] stores the raw mapping between physical apicid and

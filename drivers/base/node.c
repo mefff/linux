@@ -1025,7 +1025,7 @@ static void set_cpu_local(int nid)
 	 */
 #ifdef CONFIG_ACPI_NUMA
 	cpu_local =
-		dummy_numa ? real_nid == 0 : node_to_pxm(real_nid) != PXM_INVAL;
+		used_dummy_numa_init ? real_nid == 0 : node_to_pxm(real_nid) != PXM_INVAL;
 #else
 	cpu_local = real_nid == 0;
 #endif
