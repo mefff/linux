@@ -33,6 +33,7 @@
 
 #include <linux/kernel.h>
 #include <linux/init.h>
+#include <linux/bug.h>
 #include <linux/sort.h>
 #include <linux/efi.h>
 #include <linux/efi-bgrt.h>
@@ -46,7 +47,6 @@
 #include <linux/reboot.h>
 #include <linux/bcd.h>
 
-#include <asm/bug.h>
 #include <asm/setup.h>
 #include <asm/efi.h>
 #include <asm/e820/api.h>
