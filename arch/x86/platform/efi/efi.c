@@ -518,50 +518,38 @@ contiguous_region_mark_e820_regions(const struct contiguous_region *r)
 /*
  * This assumes that there will be no overlaps in the memory
  * map. Since if the memory map has overlaps then there is a way more
- * serious problem going on.
+ * serious problem going on. This also assumes that the system DRAM
+ * regions are sorted as suggested in this email: TODO tengo que
+ * esperar que los archives hagan el link
  */
 static void __init efi_set_e820_regions_as_crypto_capable(void)
 {
 	efi_memory_desc_t *md;
-	struct contiguous_region region, current_region;
+	struct contiguous_region accumulated_region, current_region;
 
-	contiguous_region_init(&region);
+	contiguous_region_init(&accumulated_region);
 	for_each_efi_memory_desc(md) {
-		if (md->attribute & EFI_MEMORY_CPU_CRYPTO) {
+		/*
+		 * I don't care about the MMIO regions since
+		 * cryptographic capabilities are only for system
+		 * memory
+		 */
+		if (md->type != EFI_MEMORY_MAPPED_IO &&
+		    md->attribute & EFI_MEMORY_CPU_CRYPTO) {
 			efi_md_to_contiguous_region(md, &current_region);
 
-			/* If didn't merge, mark the regions and continue the loop */
-			if (!contiguous_region_merge_regions(&region,
+			if (!contiguous_region_merge_regions(&accumulated_region,
 							     &current_region)) {
-				contiguous_region_mark_e820_regions(&region);
-				region = current_region;
+				contiguous_region_mark_e820_regions(&accumulated_region);
+				accumulated_region = current_region;
 			}
 		} else {
-			contiguous_region_mark_e820_regions(&region);
-			contiguous_region_init(&region);
+			contiguous_region_mark_e820_regions(&accumulated_region);
+			contiguous_region_init(&accumulated_region);
 		}
 	}
 
-	contiguous_region_mark_e820_regions(&region);
-}
-
-/*
- * Function to compare efi_memory_desc_t
- * It only compares the start address of the region, so it's not
- * suitable to compare intersected regions
- */
-int __init efi_cmp_memory_desc(const void *a, const void *b)
-{
-	const efi_memory_desc_t *const mda = a;
-	const efi_memory_desc_t *const mdb = b;
-
-	if (mda->phys_addr < mdb->phys_addr) {
-		return -1;
-	} else if (mda->phys_addr > mdb->phys_addr) {
-		return 1;
-	} else {
-		return 0;
-	}
+	contiguous_region_mark_e820_regions(&accumulated_region);
 }
 
 void __init efi_init(void)
@@ -617,8 +605,6 @@ void __init efi_init(void)
 	set_bit(EFI_RUNTIME_SERVICES, &efi.flags);
 	efi_clean_memmap();
 
-	sort(efi.memmap.map, efi.memmap.nr_map, efi.memmap.desc_size, efi_cmp_memory_desc,
-	     NULL);
 	efi_set_e820_regions_as_crypto_capable();
 
 	if (efi_enabled(EFI_DBG))
