@@ -443,106 +443,44 @@ static int __init efi_config_init(const efi_config_table_type_t *arch_tables)
 	return ret;
 }
 
-/* The contiguous_region type is used to help
- * efi_set_e820_regions_as_crypto_capable to pick all the contiguous
- * regions that have the EFI_MEMORY_CPU_CRYPTO attribute, and call a
- * function of the e820 module to mark those regions as being able to
- * do hardware encryption.
- *
- * To use this properly the memory map must not have any overlapped
- * regions and the regions should be sorted.
- */
-struct contiguous_region {
-	u64 start;
-	u64 end;
-};
-
-static void __init contiguous_region_init(struct contiguous_region *region)
-{
-	region->start = 0;
-	region->end = 0;
-}
-
-static void __init efi_md_to_contiguous_region(const efi_memory_desc_t *md,
-					      struct contiguous_region *region)
-{
-	region->start = md->phys_addr;
-	region->end = md->phys_addr + (md->num_pages << EFI_PAGE_SHIFT) - 1;
-}
-
-static u64 __init contiguous_region_size(const struct contiguous_region *r)
-{
-	return r->end - r->start + 1;
-}
-
-static bool __init contiguous_region_is_empty(const struct contiguous_region *r)
-{
-	/*
-	 * Since contiguous regions are built upon efi_memory_desc_t
-	 * it is safe to say that a region is empty if it's size is
-	 * lower than the size of one EFI page.
-	 */
-	return contiguous_region_size(r) < (1 << EFI_PAGE_SHIFT);
-}
-
-static bool __init
-contiguous_region_merge_regions(struct contiguous_region *region1,
-				const struct contiguous_region *region2)
-{
-	bool merge_result;
-
-	if (contiguous_region_is_empty(region1)) {
-		*region1 = *region2;
-		merge_result = true;
-	} else if (region1->end + 1 == region2->start) {
-		/* Extend region1 */
-		region1->end = region2->end;
-		merge_result = true;
-	} else {
-		merge_result = false;
-	}
-
-	return merge_result;
-}
-
-static void __init
-contiguous_region_mark_e820_regions(const struct contiguous_region *r)
-{
-	const u64 size = contiguous_region_size(r);
-
-	if (!contiguous_region_is_empty(r)) {
-		e820__mark_regions_as_crypto_capable(r->start, size);
-	}
-}
-
 /*
- * This assumes that there will be no overlaps in the memory
- * map. Since if the memory map has overlaps then there is a way more
- * serious problem going on.
+ * This assumes that there will be no overlaps in the memory map. Since if the
+ * memory map has overlaps then there is a way more serious problem going on.
  */
 static void __init efi_set_e820_regions_as_crypto_capable(void)
 {
 	efi_memory_desc_t *md;
-	struct contiguous_region region, current_region;
+	u64 accumulated_start = 0;
+	u64 accumulated_size = 0;
 
-	contiguous_region_init(&region);
 	for_each_efi_memory_desc(md) {
-		if (md->attribute & EFI_MEMORY_CPU_CRYPTO) {
-			efi_md_to_contiguous_region(md, &current_region);
+		u64 start = md->phys_addr;
+		u64 size = md->num_pages << EFI_PAGE_SHIFT;
 
-			/* If didn't merge, mark the regions and continue the loop */
-			if (!contiguous_region_merge_regions(&region,
-							     &current_region)) {
-				contiguous_region_mark_e820_regions(&region);
-				region = current_region;
+		if (md->attribute & EFI_MEMORY_CPU_CRYPTO) {
+			if (start == accumulated_start + accumulated_size) {
+				accumulated_size += size;
+			} else {
+				if (accumulated_size > 0) {
+					e820__mark_regions_as_crypto_capable(accumulated_start,
+									     accumulated_size);
+				}
+				accumulated_start = start;
+				accumulated_size = size;
 			}
 		} else {
-			contiguous_region_mark_e820_regions(&region);
-			contiguous_region_init(&region);
+			if (accumulated_size > 0) {
+				e820__mark_regions_as_crypto_capable(accumulated_start,
+								     accumulated_size);
+			}
+			accumulated_start = 0;
+			accumulated_size = 0;
 		}
 	}
 
-	contiguous_region_mark_e820_regions(&region);
+	if (accumulated_size > 0) {
+		e820__mark_regions_as_crypto_capable(accumulated_start, accumulated_size);
+	}
 }
 
 /*
