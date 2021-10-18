@@ -457,12 +457,6 @@ struct contiguous_region {
 	u64 end;
 };
 
-enum contiguous_region_result {
-	CONTIGUOUS_REGION_MERGED,
-	CONTIGUOUS_REGION_DIDNT_MERGE,
-	CONTIGUOUS_REGION_ERROR_MERGING
-};
-
 static void __init contiguous_region_init(struct contiguous_region *region)
 {
 	region->start = 0;
@@ -491,56 +485,21 @@ static bool __init contiguous_region_is_empty(const struct contiguous_region *r)
 	return contiguous_region_size(r) < (1 << EFI_PAGE_SHIFT);
 }
 
-// TODO check if sort "fails"
 static bool __init
-contiguous_region_overlapped_regions(const struct contiguous_region *r1,
-				     const struct contiguous_region *r2)
-{
-	if (r1->start < r2->start) {
-		return r2->start <= r1->end;
-	} else if (r2->start < r1->start) {
-		return r1->start <= r2->end;
-	} else {
-		/* if one region is empty there is no overlap */
-		return !contiguous_region_is_empty(r1) &&
-		       !contiguous_region_is_empty(r2);
-	}
-}
-
-static enum contiguous_region_result __init
 contiguous_region_merge_regions(struct contiguous_region *region1,
 				const struct contiguous_region *region2)
 {
-	enum contiguous_region_result merged_result = CONTIGUOUS_REGION_DIDNT_MERGE;
+	bool merge_result;
 
 	if (contiguous_region_is_empty(region1)) {
 		*region1 = *region2;
-		merged_result = CONTIGUOUS_REGION_MERGED;
+		merge_result = true;
 	} else if (region1->end + 1 == region2->start) {
 		/* Extend region1 */
 		region1->end = region2->end;
-		merged_result = CONTIGUOUS_REGION_MERGED;
-	}
-
-	return merged_result;
-}
-
-static enum contiguous_region_result __init
-contiguous_region_try_merge_regions(struct contiguous_region *region1,
-				    const struct contiguous_region *region2)
-{
-	enum contiguous_region_result merge_result = CONTIGUOUS_REGION_DIDNT_MERGE;
-
-	if (!contiguous_region_overlapped_regions(region1, region2)) {
-		merge_result = contiguous_region_merge_regions(region1, region2);
+		merge_result = true;
 	} else {
-		WARN_ON(true);
-		pr_info("efi: EFI memory descriptors overlap\n");
-		pr_info("    [0x%016llx-0x%016llx]\n", region1->start,
-			region1->end);
-		pr_info("and [0x%016llx-0x%016llx]\n", region2->start,
-			region2->end);
-		merge_result = CONTIGUOUS_REGION_ERROR_MERGING;
+		merge_result = false;
 	}
 
 	return merge_result;
@@ -556,6 +515,11 @@ contiguous_region_mark_e820_regions(const struct contiguous_region *r)
 	}
 }
 
+/*
+ * This assumes that there will be no overlaps in the memory
+ * map. Since if the memory map has overlaps then there is a way more
+ * serious problem going on.
+ */
 static void __init efi_set_e820_regions_as_crypto_capable(void)
 {
 	efi_memory_desc_t *md;
@@ -564,18 +528,13 @@ static void __init efi_set_e820_regions_as_crypto_capable(void)
 	contiguous_region_init(&region);
 	for_each_efi_memory_desc(md) {
 		if (md->attribute & EFI_MEMORY_CPU_CRYPTO) {
-			// TODO: solamente fallar si hay overlap y distinto atributo
-			enum contiguous_region_result merge_result;
-
 			efi_md_to_contiguous_region(md, &current_region);
 
-			merge_result = contiguous_region_try_merge_regions(&region,
-									 &current_region);
-			if (merge_result == CONTIGUOUS_REGION_DIDNT_MERGE) {
+			/* If didn't merge, mark the regions and continue the loop */
+			if (!contiguous_region_merge_regions(&region,
+							     &current_region)) {
 				contiguous_region_mark_e820_regions(&region);
 				region = current_region;
-			} else if (merge_result == CONTIGUOUS_REGION_ERROR_MERGING) {
-				break;
 			}
 		} else {
 			contiguous_region_mark_e820_regions(&region);
