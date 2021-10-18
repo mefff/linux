@@ -491,6 +491,7 @@ static bool __init contiguous_region_is_empty(const struct contiguous_region *r)
 	return contiguous_region_size(r) < (1 << EFI_PAGE_SHIFT);
 }
 
+// TODO check if sort "fails"
 static bool __init
 contiguous_region_overlapped_regions(const struct contiguous_region *r1,
 				     const struct contiguous_region *r2)
@@ -563,6 +564,7 @@ static void __init efi_set_e820_regions_as_crypto_capable(void)
 	contiguous_region_init(&region);
 	for_each_efi_memory_desc(md) {
 		if (md->attribute & EFI_MEMORY_CPU_CRYPTO) {
+			// TODO: solamente fallar si hay overlap y distinto atributo
 			enum contiguous_region_result merge_result;
 
 			efi_md_to_contiguous_region(md, &current_region);

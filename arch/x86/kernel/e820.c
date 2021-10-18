@@ -187,6 +187,7 @@ void __init e820__range_add(u64 start, u64 size, enum e820_type type)
 
 void __init e820__mark_regions_as_crypto_capable(u64 start, u64 size)
 {
+	// TODO: check u32 or __u32
 	u32 i;
 	u64 end = start + size;
 
