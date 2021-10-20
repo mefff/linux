@@ -487,20 +487,20 @@ static bool __init
 contiguous_region_merge_regions(struct contiguous_region *region1,
 				const struct contiguous_region *region2)
 {
-	bool merge_result;
+	bool merged_result;
 
 	if (contiguous_region_is_empty(region1)) {
 		*region1 = *region2;
-		merge_result = true;
+		merged_result = true;
 	} else if (region1->end + 1 == region2->start) {
 		/* Extend region1 */
 		region1->end = region2->end;
-		merge_result = true;
+		merged_result = true;
 	} else {
-		merge_result = false;
+		merged_result = false;
 	}
 
-	return merge_result;
+	return merged_result;
 }
 
 static void __init
