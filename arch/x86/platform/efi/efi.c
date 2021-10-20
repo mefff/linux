@@ -506,10 +506,9 @@ contiguous_region_merge_regions(struct contiguous_region *region1,
 static void __init
 contiguous_region_mark_e820_regions(const struct contiguous_region *r)
 {
-	const u64 size = contiguous_region_size(r);
-
 	if (!contiguous_region_is_empty(r)) {
-		e820__mark_regions_as_crypto_capable(r->start, size);
+		e820__mark_regions_as_crypto_capable(r->start,
+						     contiguous_region_size(r));
 	}
 }
 
