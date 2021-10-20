@@ -513,40 +513,39 @@ contiguous_region_mark_e820_regions(const struct contiguous_region *r)
 }
 
 /*
- * This assumes that there will be no overlaps in the memory
- * map. Since if the memory map has overlaps then there is a way more
- * serious problem going on. This also assumes that the system DRAM
- * regions are sorted as suggested in this email: TODO tengo que
- * esperar que los archives hagan el link
+ * This assumes that there'll be no overlaps in the memory map
+ * (otherwise we'd have a deeper problem going on). It also assumes
+ * that the system DRAM regions are already sorted; in EDK2 based UEFI
+ * firmware the entries covering system DRAM are usually sorted, with
+ * additional MMIO entries appearing unordered. This is because the
+ * UEFI memory map is constructed from the GCD memory map, which is
+ * seeded with the DRAM regions at boot, and allocations are created
+ * by splitting them up.
  */
 static void __init efi_set_e820_regions_as_crypto_capable(void)
 {
 	efi_memory_desc_t *md;
-	struct contiguous_region accumulated_region, current_region;
+	struct contiguous_region prev_region;
 
-	contiguous_region_init(&accumulated_region);
+	contiguous_region_init(&prev_region);
 	for_each_efi_memory_desc(md) {
-		/*
-		 * I don't care about the MMIO regions since
-		 * cryptographic capabilities are only for system
-		 * memory
-		 */
-		if (md->type != EFI_MEMORY_MAPPED_IO &&
-		    md->attribute & EFI_MEMORY_CPU_CRYPTO) {
+		if (md->attribute & EFI_MEMORY_CPU_CRYPTO) {
+			struct contiguous_region current_region;
+
 			efi_md_to_contiguous_region(md, &current_region);
 
-			if (!contiguous_region_merge_regions(&accumulated_region,
+			if (!contiguous_region_merge_regions(&prev_region,
 							     &current_region)) {
-				contiguous_region_mark_e820_regions(&accumulated_region);
-				accumulated_region = current_region;
+				contiguous_region_mark_e820_regions(&prev_region);
+				prev_region = current_region;
 			}
 		} else {
-			contiguous_region_mark_e820_regions(&accumulated_region);
-			contiguous_region_init(&accumulated_region);
+			contiguous_region_mark_e820_regions(&prev_region);
+			contiguous_region_init(&prev_region);
 		}
 	}
 
-	contiguous_region_mark_e820_regions(&accumulated_region);
+	contiguous_region_mark_e820_regions(&prev_region);
 }
 
 void __init efi_init(void)
