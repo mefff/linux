@@ -506,8 +506,7 @@ static bool __init cr_merge_regions(struct contiguous_region *region1,
 
 static void __init cr_mark_e820_regions(const struct contiguous_region *r)
 {
-	if (!cr_is_empty(r))
-		e820__mark_regions_as_crypto_capable(r->start, cr_size(r));
+	e820__mark_regions_as_crypto_capable(r->start, cr_size(r));
 }
 
 /*
@@ -526,23 +525,26 @@ static void __init efi_set_e820_regions_as_crypto_capable(void)
 	struct contiguous_region prev_region;
 
 	cr_init(&prev_region);
-	for_each_efi_memory_desc (md) {
+
+	for_each_efi_memory_desc(md) {
 		if (md->attribute & EFI_MEMORY_CPU_CRYPTO) {
-			struct contiguous_region current_region;
+			struct contiguous_region cur_region;
 
-			efi_md_to_cr(md, &current_region);
+			efi_md_to_cr(md, &cur_region);
 
-			if (!cr_merge_regions(&prev_region, &current_region)) {
+			if (!cr_merge_regions(&prev_region, &cur_region)) {
 				cr_mark_e820_regions(&prev_region);
-				prev_region = current_region;
-			}
-		} else {
+				prev_region = cur_region;
+			} /* Else: Merge succeeded, don't mark yet */
+		} else if (!cr_is_empty(&prev_region)) {
 			cr_mark_e820_regions(&prev_region);
 			cr_init(&prev_region);
-		}
+		} /* Else: All previous regions are already marked */
 	}
 
-	cr_mark_e820_regions(&prev_region);
+	/* Mark last region (if any) */
+	if (!cr_is_empty(&prev_region))
+		cr_mark_e820_regions(&prev_region);
 }
 
 void __init efi_init(void)
