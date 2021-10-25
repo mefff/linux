@@ -449,47 +449,48 @@ static int __init efi_config_init(const efi_config_table_type_t *arch_tables)
  *
  * To use this properly the memory map must not have any overlapped
  * regions and the regions should be sorted.
+ *
+ * cr in the function names stands for contiguous_region
  */
 struct contiguous_region {
 	u64 start;
 	u64 end;
 };
 
-static void __init contiguous_region_init(struct contiguous_region *region)
+static void __init cr_init(struct contiguous_region *region)
 {
 	region->start = 0;
 	region->end = 0;
 }
 
-static void __init efi_md_to_contiguous_region(const efi_memory_desc_t *md,
-					      struct contiguous_region *region)
+static void __init efi_md_to_cr(const efi_memory_desc_t *md,
+				struct contiguous_region *region)
 {
 	region->start = md->phys_addr;
 	region->end = md->phys_addr + (md->num_pages << EFI_PAGE_SHIFT) - 1;
 }
 
-static u64 __init contiguous_region_size(const struct contiguous_region *r)
+static u64 __init cr_size(const struct contiguous_region *r)
 {
 	return r->end - r->start + 1;
 }
 
-static bool __init contiguous_region_is_empty(const struct contiguous_region *r)
+static bool __init cr_is_empty(const struct contiguous_region *r)
 {
 	/*
 	 * Since contiguous regions are built upon efi_memory_desc_t
 	 * it is safe to say that a region is empty if it's size is
 	 * lower than the size of one EFI page.
 	 */
-	return contiguous_region_size(r) < (1 << EFI_PAGE_SHIFT);
+	return cr_size(r) < (1 << EFI_PAGE_SHIFT);
 }
 
-static bool __init
-contiguous_region_merge_regions(struct contiguous_region *region1,
-				const struct contiguous_region *region2)
+static bool __init cr_merge_regions(struct contiguous_region *region1,
+				    const struct contiguous_region *region2)
 {
 	bool merged_result;
 
-	if (contiguous_region_is_empty(region1)) {
+	if (cr_is_empty(region1)) {
 		*region1 = *region2;
 		merged_result = true;
 	} else if (region1->end + 1 == region2->start) {
@@ -503,12 +504,10 @@ contiguous_region_merge_regions(struct contiguous_region *region1,
 	return merged_result;
 }
 
-static void __init
-contiguous_region_mark_e820_regions(const struct contiguous_region *r)
+static void __init cr_mark_e820_regions(const struct contiguous_region *r)
 {
-	if (!contiguous_region_is_empty(r))
-		e820__mark_regions_as_crypto_capable(r->start,
-						     contiguous_region_size(r));
+	if (!cr_is_empty(r))
+		e820__mark_regions_as_crypto_capable(r->start, cr_size(r));
 }
 
 /*
@@ -526,25 +525,24 @@ static void __init efi_set_e820_regions_as_crypto_capable(void)
 	efi_memory_desc_t *md;
 	struct contiguous_region prev_region;
 
-	contiguous_region_init(&prev_region);
-	for_each_efi_memory_desc(md) {
+	cr_init(&prev_region);
+	for_each_efi_memory_desc (md) {
 		if (md->attribute & EFI_MEMORY_CPU_CRYPTO) {
 			struct contiguous_region current_region;
 
-			efi_md_to_contiguous_region(md, &current_region);
+			efi_md_to_cr(md, &current_region);
 
-			if (!contiguous_region_merge_regions(&prev_region,
-							     &current_region)) {
-				contiguous_region_mark_e820_regions(&prev_region);
+			if (!cr_merge_regions(&prev_region, &current_region)) {
+				cr_mark_e820_regions(&prev_region);
 				prev_region = current_region;
 			}
 		} else {
-			contiguous_region_mark_e820_regions(&prev_region);
-			contiguous_region_init(&prev_region);
+			cr_mark_e820_regions(&prev_region);
+			cr_init(&prev_region);
 		}
 	}
 
-	contiguous_region_mark_e820_regions(&prev_region);
+	cr_mark_e820_regions(&prev_region);
 }
 
 void __init efi_init(void)
