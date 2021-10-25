@@ -176,12 +176,26 @@ static void __init __e820__range_add(struct e820_table *table, u64 start, u64 si
 	table->entries[x].addr = start;
 	table->entries[x].size = size;
 	table->entries[x].type = type;
+	table->entries[x].crypto_capable = false;
 	table->nr_entries++;
 }
 
 void __init e820__range_add(u64 start, u64 size, enum e820_type type)
 {
 	__e820__range_add(e820_table, start, size, type);
+}
+
+void __init e820__mark_regions_as_crypto_capable(u64 start, u64 size)
+{
+	int i;
+	u64 end = start + size;
+
+	for (i = 0; i < e820_table->nr_entries; i++) {
+		struct e820_entry *const entry = &e820_table->entries[i];
+
+		if (entry->addr >= start && entry->addr + entry->size <= end)
+			entry->crypto_capable = true;
+	}
 }
 
 static void __init e820_print_type(enum e820_type type)
@@ -211,6 +225,8 @@ void __init e820__print_table(char *who)
 			e820_table->entries[i].addr + e820_table->entries[i].size - 1);
 
 		e820_print_type(e820_table->entries[i].type);
+		pr_cont("%s",
+			e820_table->entries[i].crypto_capable ? "; crypto-capable" : "");
 		pr_cont("\n");
 	}
 }
@@ -327,6 +343,8 @@ int __init e820__update_table(struct e820_table *table)
 	unsigned long long last_addr;
 	u32 new_nr_entries, overlap_entries;
 	u32 i, chg_idx, chg_nr;
+	bool current_crypto;
+	bool last_crypto = false;
 
 	/* If there's only one memory region, don't bother: */
 	if (table->nr_entries < 2)
@@ -388,13 +406,17 @@ int __init e820__update_table(struct e820_table *table)
 		 * 1=usable, 2,3,4,4+=unusable)
 		 */
 		current_type = 0;
+		current_crypto = false;
 		for (i = 0; i < overlap_entries; i++) {
+			current_crypto = current_crypto || overlap_list[i]->crypto_capable;
 			if (overlap_list[i]->type > current_type)
 				current_type = overlap_list[i]->type;
 		}
 
 		/* Continue building up new map based on this information: */
-		if (current_type != last_type || e820_nomerge(current_type)) {
+		if (current_type != last_type ||
+		    current_crypto != last_crypto ||
+		    e820_nomerge(current_type)) {
 			if (last_type != 0)	 {
 				new_entries[new_nr_entries].size = change_point[chg_idx]->addr - last_addr;
 				/* Move forward only if the new size was non-zero: */
@@ -406,6 +428,9 @@ int __init e820__update_table(struct e820_table *table)
 			if (current_type != 0)	{
 				new_entries[new_nr_entries].addr = change_point[chg_idx]->addr;
 				new_entries[new_nr_entries].type = current_type;
+				new_entries[new_nr_entries].crypto_capable = current_crypto;
+
+				last_crypto = current_crypto;
 				last_addr = change_point[chg_idx]->addr;
 			}
 			last_type = current_type;
@@ -1321,7 +1346,10 @@ void __init e820__memblock_setup(void)
 		if (entry->type != E820_TYPE_RAM && entry->type != E820_TYPE_RESERVED_KERN)
 			continue;
 
-		memblock_add(entry->addr, entry->size);
+		if (entry->crypto_capable)
+			memblock_add_crypto_capable(entry->addr, entry->size);
+		else
+			memblock_add(entry->addr, entry->size);
 	}
 
 	/* Throw away partial pages: */
