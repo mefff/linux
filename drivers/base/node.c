@@ -582,6 +582,7 @@ static umode_t node_attr_is_visible(struct kobject *kobj,
 
 		if (node_devices[nid]->cpu_local)
 			result = attr->mode;
+		/* Else: hide the attribute */
 	}
 
 	return result;
