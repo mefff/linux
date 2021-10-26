@@ -20,6 +20,13 @@
 #define NODE_MIN_SIZE (4*1024*1024)
 
 extern int numa_off;
+extern int emu_nid_to_phys[];
+
+/*
+ * used_dummy_numa_init indicates whether we used dummy_numa_init for
+ * initialization or not
+ */
+extern bool used_dummy_numa_init;
 
 /*
  * __apicid_to_node[] stores the raw mapping between physical apicid and

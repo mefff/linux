@@ -441,6 +441,113 @@ static int __init efi_config_init(const efi_config_table_type_t *arch_tables)
 	return ret;
 }
 
+/*
+ * The contiguous_region type is used to help
+ * efi_set_e820_regions_as_crypto_capable to pick all the contiguous
+ * regions that have the EFI_MEMORY_CPU_CRYPTO attribute, and call a
+ * function of the e820 module to mark those regions as being able to
+ * do hardware encryption.
+ *
+ * To use this properly the memory map must not have any overlapped
+ * regions and the regions should be sorted.
+ *
+ * cr in the function names stands for contiguous_region
+ */
+struct contiguous_region {
+	u64 start;
+	u64 end;
+};
+
+static void __init cr_init(struct contiguous_region *region)
+{
+	region->start = 0;
+	region->end = 0;
+}
+
+static void __init efi_md_to_cr(const efi_memory_desc_t *md,
+				struct contiguous_region *region)
+{
+	region->start = md->phys_addr;
+	region->end = md->phys_addr + (md->num_pages << EFI_PAGE_SHIFT) - 1;
+}
+
+static u64 __init cr_size(const struct contiguous_region *r)
+{
+	return r->end - r->start + 1;
+}
+
+static bool __init cr_is_empty(const struct contiguous_region *r)
+{
+	/*
+	 * Since contiguous regions are built upon efi_memory_desc_t
+	 * it is safe to say that a region is empty if it's size is
+	 * lower than the size of one EFI page.
+	 */
+	return cr_size(r) < (1 << EFI_PAGE_SHIFT);
+}
+
+static bool __init cr_merge_regions(struct contiguous_region *region1,
+				    const struct contiguous_region *region2)
+{
+	bool merged_result;
+
+	if (cr_is_empty(region1)) {
+		*region1 = *region2;
+		merged_result = true;
+	} else if (region1->end + 1 == region2->start) {
+		/* Extend region1 */
+		region1->end = region2->end;
+		merged_result = true;
+	} else {
+		merged_result = false;
+	}
+
+	return merged_result;
+}
+
+static void __init cr_mark_e820_as_crypto_capable(const struct contiguous_region *r)
+{
+	e820__mark_regions_as_crypto_capable(r->start, cr_size(r));
+}
+
+/*
+ * This assumes that there'll be no overlaps in the memory map
+ * (otherwise we'd have a deeper problem going on). It also assumes
+ * that the system DRAM regions are already sorted; in EDK2 based UEFI
+ * firmware the entries covering system DRAM are usually sorted, with
+ * additional MMIO entries appearing unordered. This is because the
+ * UEFI memory map is constructed from the GCD memory map, which is
+ * seeded with the DRAM regions at boot, and allocations are created
+ * by splitting them up.
+ */
+static void __init efi_mark_e820_regions_as_crypto_capable(void)
+{
+	efi_memory_desc_t *md;
+	struct contiguous_region prev_region;
+
+	cr_init(&prev_region);
+
+	for_each_efi_memory_desc(md) {
+		if (md->attribute & EFI_MEMORY_CPU_CRYPTO) {
+			struct contiguous_region cur_region;
+
+			efi_md_to_cr(md, &cur_region);
+
+			if (!cr_merge_regions(&prev_region, &cur_region)) {
+				cr_mark_e820_as_crypto_capable(&prev_region);
+				prev_region = cur_region;
+			} /* Else: Merge succeeded, don't mark yet */
+		} else if (!cr_is_empty(&prev_region)) {
+			cr_mark_e820_as_crypto_capable(&prev_region);
+			cr_init(&prev_region);
+		} /* Else: All previous regions are already marked */
+	}
+
+	/* Mark last region (if any) */
+	if (!cr_is_empty(&prev_region))
+		cr_mark_e820_as_crypto_capable(&prev_region);
+}
+
 void __init efi_init(void)
 {
 	if (IS_ENABLED(CONFIG_X86_32) &&
@@ -493,6 +600,8 @@ void __init efi_init(void)
 
 	set_bit(EFI_RUNTIME_SERVICES, &efi.flags);
 	efi_clean_memmap();
+
+	efi_mark_e820_regions_as_crypto_capable();
 
 	if (efi_enabled(EFI_DBG))
 		efi_print_memmap();
