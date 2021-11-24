@@ -570,24 +570,6 @@ static ssize_t crypto_capable_show(struct device *dev,
 }
 static DEVICE_ATTR_RO(crypto_capable);
 
-static umode_t node_attr_is_visible(struct kobject *kobj,
-				    struct attribute *attr, int n)
-{
-	umode_t result = 0;
-
-	if (attr == &dev_attr_crypto_capable.attr) {
-		const struct device *const dev =
-			container_of(kobj, struct device, kobj);
-		const int nid = dev->id;
-
-		if (node_devices[nid]->cpu_local)
-			result = attr->mode;
-		/* Else: hide the attribute */
-	}
-
-	return result;
-}
-
 static struct attribute *node_dev_attrs[] = {
 	&dev_attr_meminfo.attr,
 	&dev_attr_numastat.attr,
