@@ -603,9 +603,8 @@ u64 __init e820__range_remove(u64 start, u64 size, enum e820_type old_type, bool
 
 		/* Is the new range completely covered? */
 		if (entry->addr < start && entry_end > end) {
-			e820__range_add(end, entry_end - end, entry->type);
-			if (entry->crypto_capable)
-				e820__range_mark_as_crypto(end, entry_end - end);
+			__e820__range_add(e820_table, end, entry_end - end,
+					  entry->type, entry->crypto_capable);
 
 			entry->size = start - entry->addr;
 			real_removed_size += size;
