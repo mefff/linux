@@ -716,31 +716,6 @@ int __init_memblock memblock_add(phys_addr_t base, phys_addr_t size)
 }
 
 /**
- * memblock_add_crypto_capable - add new memblock region capable of
- * hardware encryption
- * @base: base address of the new region
- * @size: size of the new region
- *
- * Add new memblock region [@base, @base + @size) to the "memory" type
- * and set the MEMBLOCK_CRYPTO_CAPABLE flag. See memblock_add_range()
- * description for mode details
- *
- * Return:
- * 0 on success, -errno on failure.
- */
-int __init_memblock memblock_add_crypto_capable(phys_addr_t base,
-						phys_addr_t size)
-{
-	const phys_addr_t end = base + size - 1;
-
-	memblock_dbg("%s: [%pa-%pa] %pS\n", __func__,
-		     &base, &end, (void *)_RET_IP_);
-
-	return memblock_add_range(&memblock.memory, base, size, MAX_NUMNODES,
-				  MEMBLOCK_CRYPTO_CAPABLE);
-}
-
-/**
  * memblock_isolate_range - isolate given range into disjoint memblocks
  * @type: memblock type to isolate range for
  * @base: base of range to isolate

@@ -185,19 +185,6 @@ void __init e820__range_add(u64 start, u64 size, enum e820_type type)
 	__e820__range_add(e820_table, start, size, type, 0);
 }
 
-void __init e820__mark_regions_as_crypto_capable(u64 start, u64 size)
-{
-	int i;
-	u64 end = start + size;
-
-	for (i = 0; i < e820_table->nr_entries; i++) {
-		struct e820_entry *const entry = &e820_table->entries[i];
-
-		if (entry->addr >= start && entry->addr + entry->size <= end)
-			entry->crypto_capable = true;
-	}
-}
-
 static void __init e820_print_type(enum e820_type type)
 {
 	switch (type) {

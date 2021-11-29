@@ -5,7 +5,6 @@
 
 #include <linux/module.h>
 #include <linux/init.h>
-#include <linux/acpi.h>
 #include <linux/mm.h>
 #include <linux/memory.h>
 #include <linux/vmstat.h>
@@ -587,8 +586,7 @@ static struct bin_attribute *node_dev_bin_attrs[] = {
 
 static const struct attribute_group node_dev_group = {
 	.attrs = node_dev_attrs,
-	.bin_attrs = node_dev_bin_attrs,
-	.is_visible = node_attr_is_visible,
+	.bin_attrs = node_dev_bin_attrs
 };
 
 static const struct attribute_group *node_dev_groups[] = {
@@ -984,44 +982,6 @@ static void init_node_hugetlb_work(int nid) { }
 
 #endif
 
-#ifdef CONFIG_NUMA
-#ifdef CONFIG_NUMA_EMU
-static int get_real_nid(int nid)
-{
-	return emu_nid_to_phys[nid];
-}
-#else
-static int get_real_nid(int nid)
-{
-	return nid;
-}
-#endif /* CONFIG_NUMA_EMU */
-
-static void set_cpu_local(int nid)
-{
-	const int real_nid = get_real_nid(nid);
-	bool cpu_local;
-
-	/*
-	 * If we have the SRAT table available we need to check it
-	 * otherwise it's enough to check if real_nid is 0
-	 */
-#ifdef CONFIG_ACPI_NUMA
-	cpu_local =
-		used_dummy_numa_init ? real_nid == 0 : node_to_pxm(real_nid) != PXM_INVAL;
-#else
-	cpu_local = real_nid == 0;
-#endif
-
-	node_devices[nid]->cpu_local = cpu_local;
-}
-#else
-static void set_cpu_local(nid)
-{
-	node_devices[nid]->cpu_local = true;
-}
-#endif /* CONFIG_NUMA */
-
 int __register_one_node(int nid)
 {
 	int error;
@@ -1030,8 +990,6 @@ int __register_one_node(int nid)
 	node_devices[nid] = kzalloc(sizeof(struct node), GFP_KERNEL);
 	if (!node_devices[nid])
 		return -ENOMEM;
-
-	set_cpu_local(nid);
 
 	error = register_node(node_devices[nid], nid);
 
