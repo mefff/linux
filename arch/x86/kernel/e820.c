@@ -553,7 +553,7 @@ __e820__range_update(struct e820_table *table, u64 start, u64 size, enum e820_ty
 	return real_updated_size;
 }
 
-u64 __init e820__range_mark_as_crypto(u64 start, u64 size)
+u64 __init e820__range_mark_as_crypto_capable(u64 start, u64 size)
 {
 	return __e820__range_update(e820_table, start, size, 0, 0, true);
 }
