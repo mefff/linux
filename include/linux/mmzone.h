@@ -881,6 +881,7 @@ enum pgdat_flags {
 					 * many pages under writeback
 					 */
 	PGDAT_RECLAIM_LOCKED,		/* prevents concurrent reclaim */
+	PGDAT_CRYPTO_CAPABLE,           /* capable of hardware encryption */
 };
 
 enum zone_flags {
@@ -1185,6 +1186,7 @@ typedef struct pglist_data {
 	struct task_struct *kcompactd;
 	bool proactive_compact_trigger;
 #endif
+
 	/*
 	 * This is a per-node reserve of pages that are not available
 	 * to userspace allocations.

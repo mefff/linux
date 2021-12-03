@@ -7912,6 +7912,11 @@ static void __init free_area_init_node(int nid)
 	pgdat->node_start_pfn = start_pfn;
 	pgdat->per_cpu_nodestats = NULL;
 
+	if (memblock_node_is_crypto_capable(nid))
+	{
+		set_bit(PGDAT_CRYPTO_CAPABLE, &pgdat->flags);
+	}
+
 	if (start_pfn != end_pfn) {
 		pr_info("Initmem setup node %d [mem %#018Lx-%#018Lx]\n", nid,
 			(u64)start_pfn << PAGE_SHIFT,
