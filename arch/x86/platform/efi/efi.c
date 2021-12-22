@@ -449,7 +449,8 @@ static void __init efi_mark_e820_regions_as_crypto_capable(void)
 
 	for_each_efi_memory_desc(md) {
 		if (md->attribute & EFI_MEMORY_CPU_CRYPTO)
-			e820__range_mark_as_crypto_capable(md->phys_addr, md->num_pages << EFI_PAGE_SHIFT);
+			e820__range_mark_as_crypto_capable(md->phys_addr,
+							   md->num_pages << EFI_PAGE_SHIFT);
 	}
 
 	/*

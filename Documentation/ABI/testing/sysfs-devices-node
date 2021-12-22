@@ -1,7 +1,7 @@
 What:		/sys/devices/system/node/nodeX/crypto_capable
-Date:		October 2021
+Date:		December 2021
 Contact:	Martin Fernandez <martin.fernandez@eclypsium.com>
-Users:		fwupd
+Users:		fwupd (https://fwupd.org)
 Description:
 		This value is 1 if all system memory in this node is
 		marked with EFI_MEMORY_CPU_CRYPTO, indicating that the
