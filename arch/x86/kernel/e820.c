@@ -163,7 +163,9 @@ int e820__get_entry_type(u64 start, u64 end)
 /*
  * Add a memory region to the kernel E820 map.
  */
-static void __init __e820__range_add(struct e820_table *table, u64 start, u64 size, enum e820_type type, u8 crypto_capable)
+static void __init __e820__range_add(struct e820_table *table, u64 start,
+				     u64 size, enum e820_type type,
+				     enum e820_crypto_capabilities crypto_capable)
 {
 	int x = table->nr_entries;
 
@@ -182,7 +184,7 @@ static void __init __e820__range_add(struct e820_table *table, u64 start, u64 si
 
 void __init e820__range_add(u64 start, u64 size, enum e820_type type)
 {
-	__e820__range_add(e820_table, start, size, type, 0);
+	__e820__range_add(e820_table, start, size, type, E820_NOT_CRYPTO_CAPABLE);
 }
 
 static void __init e820_print_type(enum e820_type type)
@@ -212,7 +214,7 @@ void __init e820__print_table(char *who)
 			e820_table->entries[i].addr + e820_table->entries[i].size - 1);
 
 		e820_print_type(e820_table->entries[i].type);
-		if (e820_table->entries[i].crypto_capable)
+		if (e820_table->entries[i].crypto_capable == E820_CRYPTO_CAPABLE)
 			pr_cont("; crypto-capable");
 		pr_cont("\n");
 	}
@@ -330,7 +332,7 @@ int __init e820__update_table(struct e820_table *table)
 	unsigned long long last_addr;
 	u32 new_nr_entries, overlap_entries;
 	u32 i, chg_idx, chg_nr;
-	u8 current_crypto, last_crypto;
+	enum e820_crypto_capabilities current_crypto, last_crypto;
 
 	/* If there's only one memory region, don't bother: */
 	if (table->nr_entries < 2)
@@ -371,7 +373,7 @@ int __init e820__update_table(struct e820_table *table)
 	new_nr_entries = 0;	 /* Index for creating new map entries */
 	last_type = 0;		 /* Start with undefined memory type */
 	last_addr = 0;		 /* Start with 0 as last starting address */
-	last_crypto = 0;
+	last_crypto = E820_NOT_CRYPTO_CAPABLE;
 
 	/* Loop through change-points, determining effect on the new map: */
 	for (chg_idx = 0; chg_idx < chg_nr; chg_idx++) {
@@ -393,9 +395,11 @@ int __init e820__update_table(struct e820_table *table)
 		 * 1=usable, 2,3,4,4+=unusable)
 		 */
 		current_type = 0;
-		current_crypto = 1;
+		current_crypto = E820_CRYPTO_CAPABLE;
 		for (i = 0; i < overlap_entries; i++) {
-			current_crypto = current_crypto && overlap_list[i]->crypto_capable;
+			if (overlap_list[i]->crypto_capable < current_crypto)
+				current_crypto = overlap_list[i]->crypto_capable;
+
 			if (overlap_list[i]->type > current_type)
 				current_type = overlap_list[i]->type;
 		}
@@ -521,9 +525,8 @@ __e820__range_update(struct e820_table *table, u64 start, u64 size, enum e820_ty
 
 		/* New range is completely covered? */
 		if (entry->addr < start && entry_end > end) {
-			__e820__range_add(table, start, size, new_type, crypto_capable);
-			__e820__range_add(table, end, entry_end - end,
-					  entry->type, entry->crypto_capable);
+			__e820__range_add(table, start, size, new_type, entry->crypto_capable);
+			__e820__range_add(table, end, entry_end - end, entry->type, entry->crypto_capable);
 			entry->size = start - entry->addr;
 			real_updated_size += size;
 			continue;
@@ -536,7 +539,79 @@ __e820__range_update(struct e820_table *table, u64 start, u64 size, enum e820_ty
 			continue;
 
 		__e820__range_add(table, final_start, final_end - final_start,
-				  new_type, crypto_capable);
+				  new_type, entry->crypto_capable);
+
+		real_updated_size += final_end - final_start;
+
+		/*
+		 * Left range could be head or tail, so need to update
+		 * its size first:
+		 */
+		entry->size -= final_end - final_start;
+		if (entry->addr < final_start)
+			continue;
+
+		entry->addr = final_end;
+	}
+	return real_updated_size;
+}
+
+/*
+ * Update crypto capabilities in a range
+ */
+static u64 __init __e820__range_update_crypto(struct e820_table *table,
+					      u64 start, u64 size,
+					      enum e820_crypto_capabilities crypto_capable)
+{
+	u64 end;
+	unsigned int i;
+	u64 real_updated_size = 0;
+
+	if (size > (ULLONG_MAX - start))
+		size = ULLONG_MAX - start;
+
+	end = start + size;
+	printk(KERN_DEBUG "e820: update crypto capabilities [mem %#018Lx-%#018Lx] ", start, end - 1);
+	pr_cont(" ==> ");
+	if (crypto_capable == E820_CRYPTO_CAPABLE)
+		pr_cont("crypto capable");
+	else
+		pr_cont("not crypto capable");
+	pr_cont("\n");
+
+	for (i = 0; i < table->nr_entries; i++) {
+		struct e820_entry *entry = &table->entries[i];
+		u64 final_start, final_end;
+		u64 entry_end;
+		enum e820_type type = entry->type;
+
+		entry_end = entry->addr + entry->size;
+
+		/* Completely covered by new range? */
+		if (entry->addr >= start && entry_end <= end) {
+			entry->crypto_capable = crypto_capable;
+			real_updated_size += entry->size;
+			continue;
+		}
+
+		/* New range is completely covered? */
+		if (entry->addr < start && entry_end > end) {
+			__e820__range_add(table, start, size, type, crypto_capable);
+			__e820__range_add(table, end, entry_end - end,
+					  type, entry->crypto_capable);
+			entry->size = start - entry->addr;
+			real_updated_size += size;
+			continue;
+		}
+
+		/* Partially covered: */
+		final_start = max(start, entry->addr);
+		final_end = min(end, entry_end);
+		if (final_start >= final_end)
+			continue;
+
+		__e820__range_add(table, final_start, final_end - final_start,
+				  type, crypto_capable);
 
 		real_updated_size += final_end - final_start;
 
@@ -555,7 +630,7 @@ __e820__range_update(struct e820_table *table, u64 start, u64 size, enum e820_ty
 
 u64 __init e820__range_mark_as_crypto_capable(u64 start, u64 size)
 {
-	return __e820__range_update(e820_table, start, size, 0, 0, true);
+	return __e820__range_update_crypto(e820_table, start, size, E820_CRYPTO_CAPABLE);
 }
 
 u64 __init e820__range_update(u64 start, u64 size, enum e820_type old_type, enum e820_type new_type)
@@ -1355,7 +1430,7 @@ void __init e820__memblock_setup(void)
 			continue;
 
 		memblock_add(entry->addr, entry->size);
-		if (entry->crypto_capable)
+		if (entry->crypto_capable == E820_CRYPTO_CAPABLE)
 			memblock_mark_crypto_capable(entry->addr, entry->size);
 	}
 
