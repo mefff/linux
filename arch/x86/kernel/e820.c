@@ -475,72 +475,138 @@ static int __init append_e820_table(struct boot_e820_entry *entries, u32 nr_entr
 	return __append_e820_table(entries, nr_entries);
 }
 
+/*
+ * Helper to __e820__range* functions to easily identify if the
+ * overlap and how they do.
+ */
+struct e820_range {
+	u64 start;		/* Start of the range */
+	u64 end;		/* End of the range */
+	u64 entry_start;	/* Start of the entry to analyse */
+	u64 entry_end;		/* End of the entry to analyse */
+	u64 inner_start;	/* Max between both starts */
+	u64 inner_end;		/* Min between both ends */
+};
+
+enum e820_range_cover_type {
+	E820_RANGE_NO_COVER,		/* Entry and range do not overlap */
+	E820_RANGE_COVER_BY_RANGE,	/* Range completely covers the entry */
+	E820_RANGE_COVER_BY_ENTRY,	/* Entry completely covers the range */
+	// TODO: Do I really want this?
+	E820_RANGE_OVERLAP_SAME_START,	/* They overlap and have the same start */
+	E820_RANGE_OVERLAP_RANGE_FIRST,	/* They overlap and range starts first */
+	E820_RANGE_OVERLAP_ENTRY_FIRST,	/* They overlap and the entry starts first */
+};
+
+static void __e820__range_init(struct e820_range *range,
+			       const struct e820_entry *entry, u64 start,
+			       u64 size)
+{
+	range->entry_start = entry->addr;
+	range->entry_end = entry->addr + entry->size;
+	range->start = start;
+	range->end = start + size;
+
+	range->inner_start = max(range->start, range->entry_start);
+	range->inner_end = min(range->end, range->entry_end);
+}
+
+static enum e820_range_cover_type
+__e820__range_get_cover_type(const struct e820_range *range, u64 *update_size)
+{
+	if ((range->start <= range->entry_start) &&
+		(range->end >= range->entry_end)) {
+		*update_size += range->entry_end - range->entry_start;
+		return E820_RANGE_COVER_BY_RANGE;
+	} else if ((range->entry_start < range->start) &&
+		(range->entry_end > range->end)) {
+		*update_size += range->end - range->start;
+		return E820_RANGE_COVER_BY_ENTRY;
+	} else if (range->inner_end > range->inner_start) {
+		*update_size += range->inner_end - range->inner_start;
+		if (range->start == range->entry_start) {
+			return E820_RANGE_OVERLAP_SAME_START;
+		} else if (range->entry_start < range->start) {
+			return E820_RANGE_OVERLAP_ENTRY_FIRST;
+		} else { /* Else: range->entry_start > range->start */
+			return E820_RANGE_OVERLAP_RANGE_FIRST;
+		}
+	} else {
+		return E820_RANGE_NO_COVER;
+	}
+}
+
+// TODO: Remove this
+static void e820_range_print(const struct e820_range *range)
+{
+	pr_info("e820_range_print: [mem %#010Lx-%#010Lx]\n", range->start, range->end - 1);
+	pr_info("                  [mem %#010Lx-%#010Lx]\n", range->entry_start, range->entry_end - 1);
+	pr_info("                  [mem %#010Lx-%#010Lx]\n", range->inner_start, range->inner_end - 1);
+}
+
+// TODO: i need to be defined before, check if can do better
+#define for_each_e820_range(table, entry, i)                                   \
+	for (i = 0, entry = &table->entries[i]; i < table->nr_entries;         \
+	     i++, entry = &table->entries[i])
+
 static u64 __init
 __e820__range_update(struct e820_table *table, u64 start, u64 size, enum e820_type old_type, enum e820_type new_type)
 {
-	u64 end;
 	unsigned int i;
 	u64 real_updated_size = 0;
+	struct e820_entry *entry;
+	struct e820_range range;
 
 	BUG_ON(old_type == new_type);
 
 	if (size > (ULLONG_MAX - start))
 		size = ULLONG_MAX - start;
 
-	end = start + size;
-	printk(KERN_DEBUG "e820: update [mem %#010Lx-%#010Lx] ", start, end - 1);
+	// TODO: revert this to printk KERN_DEBUG
+	pr_info( "e820: update [mem %#018Lx-%#018Lx] ", start, start + size - 1);
 	e820_print_type(old_type);
 	pr_cont(" ==> ");
 	e820_print_type(new_type);
 	pr_cont("\n");
 
-	for (i = 0; i < table->nr_entries; i++) {
-		struct e820_entry *entry = &table->entries[i];
-		u64 final_start, final_end;
-		u64 entry_end;
-
+	// TODO: remove printks
+	for_each_e820_range(table, entry, i) {
 		if (entry->type != old_type)
 			continue;
 
-		entry_end = entry->addr + entry->size;
+		__e820__range_init(&range, entry, start, size);
 
-		/* Completely covered by new range? */
-		if (entry->addr >= start && entry_end <= end) {
+		switch (__e820__range_get_cover_type(&range, &real_updated_size)) {
+		case E820_RANGE_COVER_BY_RANGE:
 			entry->type = new_type;
-			real_updated_size += entry->size;
-			continue;
+			break;
+		case E820_RANGE_COVER_BY_ENTRY:
+			entry->size = range.start - range.entry_start;
+			__e820__range_add(table, range.start, size,
+					  new_type, entry->crypto_capable);
+			__e820__range_add(table, range.end,
+					  range.entry_end - range.end,
+					  entry->type, entry->crypto_capable);
+			break;
+		case E820_RANGE_OVERLAP_RANGE_FIRST:
+		case E820_RANGE_OVERLAP_SAME_START:
+			entry->addr = range.inner_end;
+			entry->size -= range.inner_end - range.inner_start;
+			__e820__range_add(table, range.inner_start,
+					  range.inner_end - range.inner_start,
+					  new_type, entry->crypto_capable);
+			break;
+		case E820_RANGE_OVERLAP_ENTRY_FIRST:
+			entry->size -= range.inner_end - range.inner_start;
+			__e820__range_add(table, range.inner_start,
+					  range.inner_end - range.inner_start,
+					  new_type, entry->crypto_capable);
+			break;
+		default: /* E820_RANGE_NO_COVER */
+			break;
 		}
-
-		/* New range is completely covered? */
-		if (entry->addr < start && entry_end > end) {
-			__e820__range_add(table, start, size, new_type, entry->crypto_capable);
-			__e820__range_add(table, end, entry_end - end, entry->type, entry->crypto_capable);
-			entry->size = start - entry->addr;
-			real_updated_size += size;
-			continue;
-		}
-
-		/* Partially covered: */
-		final_start = max(start, entry->addr);
-		final_end = min(end, entry_end);
-		if (final_start >= final_end)
-			continue;
-
-		__e820__range_add(table, final_start, final_end - final_start,
-				  new_type, entry->crypto_capable);
-
-		real_updated_size += final_end - final_start;
-
-		/*
-		 * Left range could be head or tail, so need to update
-		 * its size first:
-		 */
-		entry->size -= final_end - final_start;
-		if (entry->addr < final_start)
-			continue;
-
-		entry->addr = final_end;
 	}
+
 	return real_updated_size;
 }
 
@@ -551,15 +617,16 @@ static u64 __init __e820__range_update_crypto(struct e820_table *table,
 					      u64 start, u64 size,
 					      enum e820_crypto_capabilities crypto_capable)
 {
-	u64 end;
 	unsigned int i;
 	u64 real_updated_size = 0;
+	struct e820_range range;
 
 	if (size > (ULLONG_MAX - start))
 		size = ULLONG_MAX - start;
 
-	end = start + size;
-	printk(KERN_DEBUG "e820: update crypto capabilities [mem %#018Lx-%#018Lx] ", start, end - 1);
+	printk(KERN_DEBUG
+	       "e820: update crypto capabilities [mem %#018Lx-%#018Lx] ",
+	       start, start + size - 1);
 	pr_cont(" ==> ");
 	if (crypto_capable == E820_CRYPTO_CAPABLE)
 		pr_cont("crypto capable");
@@ -569,50 +636,40 @@ static u64 __init __e820__range_update_crypto(struct e820_table *table,
 
 	for (i = 0; i < table->nr_entries; i++) {
 		struct e820_entry *entry = &table->entries[i];
-		u64 final_start, final_end;
-		u64 entry_end;
-		enum e820_type type = entry->type;
 
-		entry_end = entry->addr + entry->size;
+		__e820__range_init(&range, entry, start, size);
 
-		/* Completely covered by new range? */
-		if (entry->addr >= start && entry_end <= end) {
+		switch (__e820__range_get_cover_type(&range, &real_updated_size)) {
+		case E820_RANGE_COVER_BY_RANGE:
 			entry->crypto_capable = crypto_capable;
-			real_updated_size += entry->size;
-			continue;
+			break;
+		case E820_RANGE_COVER_BY_ENTRY:
+			entry->size = range.start - range.entry_start;
+			__e820__range_add(table, range.start, size, entry->type,
+					  crypto_capable);
+			__e820__range_add(table, range.end,
+					  range.entry_end - range.end,
+					  entry->type, entry->crypto_capable);
+			break;
+		case E820_RANGE_OVERLAP_RANGE_FIRST:
+		case E820_RANGE_OVERLAP_SAME_START:
+			entry->addr = range.inner_end;
+			entry->size -= range.inner_end - range.inner_start;
+			__e820__range_add(table, range.inner_start,
+					  range.inner_end - range.inner_start,
+					  entry->type, crypto_capable);
+			break;
+		case E820_RANGE_OVERLAP_ENTRY_FIRST:
+			entry->size -= range.inner_end - range.inner_start;
+			__e820__range_add(table, range.inner_start,
+					  range.inner_end - range.inner_start,
+					  entry->type, crypto_capable);
+			break;
+		default: /* E820_RANGE_NO_COVER */
+			break;
 		}
-
-		/* New range is completely covered? */
-		if (entry->addr < start && entry_end > end) {
-			__e820__range_add(table, start, size, type, crypto_capable);
-			__e820__range_add(table, end, entry_end - end,
-					  type, entry->crypto_capable);
-			entry->size = start - entry->addr;
-			real_updated_size += size;
-			continue;
-		}
-
-		/* Partially covered: */
-		final_start = max(start, entry->addr);
-		final_end = min(end, entry_end);
-		if (final_start >= final_end)
-			continue;
-
-		__e820__range_add(table, final_start, final_end - final_start,
-				  type, crypto_capable);
-
-		real_updated_size += final_end - final_start;
-
-		/*
-		 * Left range could be head or tail, so need to update
-		 * its size first:
-		 */
-		entry->size -= final_end - final_start;
-		if (entry->addr < final_start)
-			continue;
-
-		entry->addr = final_end;
 	}
+
 	return real_updated_size;
 }
 
@@ -635,63 +692,48 @@ static u64 __init e820__range_update_kexec(u64 start, u64 size, enum e820_type o
 u64 __init e820__range_remove(u64 start, u64 size, enum e820_type old_type, bool check_type)
 {
 	int i;
-	u64 end;
 	u64 real_removed_size = 0;
+	struct e820_range range;
 
 	if (size > (ULLONG_MAX - start))
 		size = ULLONG_MAX - start;
 
-	end = start + size;
-	printk(KERN_DEBUG "e820: remove [mem %#010Lx-%#010Lx] ", start, end - 1);
+	printk(KERN_DEBUG "e820: remove [mem %#018Lx-%#018Lx] ", start, start + size - 1);
 	if (check_type)
 		e820_print_type(old_type);
 	pr_cont("\n");
 
 	for (i = 0; i < e820_table->nr_entries; i++) {
 		struct e820_entry *entry = &e820_table->entries[i];
-		u64 final_start, final_end;
-		u64 entry_end;
 
 		if (check_type && entry->type != old_type)
 			continue;
 
-		entry_end = entry->addr + entry->size;
+		__e820__range_init(&range, entry, start, size);
 
-		/* Completely covered? */
-		if (entry->addr >= start && entry_end <= end) {
-			real_removed_size += entry->size;
+		switch (__e820__range_get_cover_type(&range, &real_removed_size)) {
+		case E820_RANGE_COVER_BY_RANGE:
 			memset(entry, 0, sizeof(*entry));
-			continue;
-		}
-
-		/* Is the new range completely covered? */
-		if (entry->addr < start && entry_end > end) {
-			__e820__range_add(e820_table, end, entry_end - end,
-					  entry->type, entry->crypto_capable);
-
+			break;
+		case E820_RANGE_COVER_BY_ENTRY:
 			entry->size = start - entry->addr;
-			real_removed_size += size;
-			continue;
+			__e820__range_add(e820_table, range.end,
+					  range.entry_end - range.end,
+					  entry->type, entry->crypto_capable);
+			break;
+		case E820_RANGE_OVERLAP_RANGE_FIRST:
+		case E820_RANGE_OVERLAP_SAME_START:
+			entry->addr = range.inner_end;
+			entry->size -= range.inner_end - range.inner_start;
+			break;
+		case E820_RANGE_OVERLAP_ENTRY_FIRST:
+			entry->size -= range.inner_end - range.inner_start;
+			break;
+		default: /* E820_RANGE_NO_COVER */
+			break;
 		}
-
-		/* Partially covered: */
-		final_start = max(start, entry->addr);
-		final_end = min(end, entry_end);
-		if (final_start >= final_end)
-			continue;
-
-		real_removed_size += final_end - final_start;
-
-		/*
-		 * Left range could be head or tail, so need to update
-		 * the size first:
-		 */
-		entry->size -= final_end - final_start;
-		if (entry->addr < final_start)
-			continue;
-
-		entry->addr = final_end;
 	}
+
 	return real_removed_size;
 }
 
@@ -1392,6 +1434,8 @@ void __init e820__memblock_setup(void)
 {
 	int i;
 	u64 end;
+
+	e820__print_table("before memblock");
 
 	/*
 	 * The bootstrap memblock region count maximum is 128 entries
