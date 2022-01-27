@@ -475,20 +475,14 @@ static int __init append_e820_table(struct boot_e820_entry *entries, u32 nr_entr
 	return __append_e820_table(entries, nr_entries);
 }
 
-/*
- * Update a memory range.
- *
- * If old_type and new_type are the same then ignore the types and
- * just change crypto_capable.
- */
 static u64 __init
-__e820__range_update(struct e820_table *table, u64 start, u64 size, enum e820_type old_type, enum e820_type new_type, u8 crypto_capable)
+__e820__range_update(struct e820_table *table, u64 start, u64 size, enum e820_type old_type, enum e820_type new_type)
 {
 	u64 end;
 	unsigned int i;
 	u64 real_updated_size = 0;
 
-	bool update_crypto = new_type == old_type;
+	BUG_ON(old_type == new_type);
 
 	if (size > (ULLONG_MAX - start))
 		size = ULLONG_MAX - start;
@@ -498,8 +492,6 @@ __e820__range_update(struct e820_table *table, u64 start, u64 size, enum e820_ty
 	e820_print_type(old_type);
 	pr_cont(" ==> ");
 	e820_print_type(new_type);
-	if (crypto_capable)
-		pr_cont("; crypto-capable");
 	pr_cont("\n");
 
 	for (i = 0; i < table->nr_entries; i++) {
@@ -507,18 +499,14 @@ __e820__range_update(struct e820_table *table, u64 start, u64 size, enum e820_ty
 		u64 final_start, final_end;
 		u64 entry_end;
 
-		if (entry->type != old_type && !update_crypto)
+		if (entry->type != old_type)
 			continue;
-
-		if (update_crypto)
-			new_type = entry->type;
 
 		entry_end = entry->addr + entry->size;
 
 		/* Completely covered by new range? */
 		if (entry->addr >= start && entry_end <= end) {
 			entry->type = new_type;
-			entry->crypto_capable = crypto_capable;
 			real_updated_size += entry->size;
 			continue;
 		}
@@ -635,12 +623,12 @@ u64 __init e820__range_mark_as_crypto_capable(u64 start, u64 size)
 
 u64 __init e820__range_update(u64 start, u64 size, enum e820_type old_type, enum e820_type new_type)
 {
-	return __e820__range_update(e820_table, start, size, old_type, new_type, false);
+	return __e820__range_update(e820_table, start, size, old_type, new_type);
 }
 
 static u64 __init e820__range_update_kexec(u64 start, u64 size, enum e820_type old_type, enum e820_type  new_type)
 {
-	return __e820__range_update(e820_table_kexec, start, size, old_type, new_type, false);
+	return __e820__range_update(e820_table_kexec, start, size, old_type, new_type);
 }
 
 /* Remove a range of memory from the E820 table: */
