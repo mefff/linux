@@ -475,7 +475,6 @@ static int __init append_e820_table(struct boot_e820_entry *entries, u32 nr_entr
 	return __append_e820_table(entries, nr_entries);
 }
 
-// TODO: The names of the instanciated functions suck
 /**
  * Helper type for __e820__handle_range_update. Each function
  * corresponds to an action that __e820__handle_range_update
@@ -484,29 +483,29 @@ static int __init append_e820_table(struct boot_e820_entry *entries, u32 nr_entr
  * @should_update: Return true if @entry needs to be updated, false
  * otherwise.
  *
- * @update_existing: Apply desired actions to @entry.
+ * @update: Apply desired actions to @entry.
  *
  * @new: Create new entry in the table with information gathered from
  * @original and @data.
  */
 struct e820_entry_updater {
 	bool (*should_update)(const struct e820_entry *entry, const void *data);
-	void (*update_existing)(struct e820_entry *entry, const void *data);
+	void (*update)(struct e820_entry *entry, const void *data);
 	void (*new)(struct e820_table *table, u64 new_start, u64 new_size,
 		    const struct e820_entry *original, const void *data);
 };
 
-struct e820_entry_remover_data {
+struct e820_remover_data {
 	enum e820_type old_type;
 	bool check_type;
 };
 
-struct e820_entry_type_updater_data {
+struct e820_type_updater_data {
 	enum e820_type old_type;
 	enum e820_type new_type;
 };
 
-struct e820_entry_crypto_updater_data {
+struct e820_crypto_updater_data {
 	enum e820_crypto_capabilities crypto_capable;
 };
 
@@ -578,7 +577,7 @@ static u64 __init __e820__handle_range_update(
 		if (updater->should_update(data, entry)) {
 			/* Range completely covers entry */
 			if (entry->addr >= start && entry_end <= end) {
-				updater->update_existing(entry, data);
+				updater->update(entry, data);
 				updated_size += entry->size;
 			/* Entry completely covers range */
 			} else if (start > entry->addr && end < entry_end) {
@@ -609,30 +608,31 @@ static u64 __init __e820__handle_range_update(
 	return updated_size;
 }
 
-static bool __init __e820__range_should_update_type(const struct e820_entry *entry, const void *data)
+static bool __init type_updater__should_update(const struct e820_entry *entry,
+					       const void *data)
 {
-	struct e820_entry_type_updater_data *type_updater_data =
-		(struct e820_entry_type_updater_data *)data;
+	struct e820_type_updater_data *type_updater_data =
+		(struct e820_type_updater_data *)data;
 
 	return entry->type == type_updater_data->old_type;
 }
 
-static void __init __e820__range_update_existing_type(struct e820_entry *entry, const void *data)
+static void __init type_updater__update(struct e820_entry *entry,
+					const void *data)
 {
-	struct e820_entry_type_updater_data *type_updater_data =
-		(struct e820_entry_type_updater_data *)data;
+	struct e820_type_updater_data *type_updater_data =
+		(struct e820_type_updater_data *)data;
 
 	entry->type = type_updater_data->new_type;
 }
 
-static void __init __e820__range_update_new_type(struct e820_table *table,
-						 u64 new_start,
-						 u64 new_size,
-						 const struct e820_entry *original,
-						 const void *data)
+static void __init type_updater__new(struct e820_table *table, u64 new_start,
+				     u64 new_size,
+				     const struct e820_entry *original,
+				     const void *data)
 {
-	struct e820_entry_type_updater_data *type_updater_data =
-		(struct e820_entry_type_updater_data *)data;
+	struct e820_type_updater_data *type_updater_data =
+		(struct e820_type_updater_data *)data;
 
 	__e820__range_add(table, new_start, new_size,
 			  type_updater_data->new_type,
@@ -644,17 +644,17 @@ static u64 __init __e820__range_update(struct e820_table *table, u64 start,
 				       enum e820_type new_type)
 {
 	struct e820_entry_updater updater = {
-		.should_update = __e820__range_should_update_type,
-		.update_existing = __e820__range_update_existing_type,
-		.new = __e820__range_update_new_type
+		.should_update = type_updater__should_update,
+		.update = type_updater__update,
+		.new = type_updater__new
 	};
 
-	struct e820_entry_type_updater_data data = {
+	struct e820_type_updater_data data = {
 		.old_type = old_type,
 		.new_type = new_type
 	};
 
-	pr_debug("e820: update [mem %#018Lx-%#018Lx] ", start,
+	printk(KERN_DEBUG "e820: update [mem %#018Lx-%#018Lx] ", start,
 	       start + size - 1);
 	e820_print_type(old_type);
 	pr_cont(" ==> ");
@@ -664,30 +664,31 @@ static u64 __init __e820__range_update(struct e820_table *table, u64 start,
 	return __e820__handle_range_update(table, start, size, &updater, &data);
 }
 
-static bool __init __e820__range_should_update_crypto(const struct e820_entry *entry, const void *data)
+static bool __init crypto_updater__should_update(const struct e820_entry *entry,
+						 const void *data)
 {
-	struct e820_entry_crypto_updater_data *crypto_updater_data =
-		(struct e820_entry_crypto_updater_data *)data;
+	struct e820_crypto_updater_data *crypto_updater_data =
+		(struct e820_crypto_updater_data *)data;
 
 	return crypto_updater_data->crypto_capable != entry->crypto_capable;
 }
 
-static void __init __e820__range_update_existing_crypto(struct e820_entry *entry, const void *data)
+static void __init crypto_updater__update(struct e820_entry *entry,
+					  const void *data)
 {
-	struct e820_entry_crypto_updater_data *crypto_updater_data =
-		(struct e820_entry_crypto_updater_data *)data;
+	struct e820_crypto_updater_data *crypto_updater_data =
+		(struct e820_crypto_updater_data *)data;
 
 	entry->crypto_capable = crypto_updater_data->crypto_capable;
 }
 
-static void __init __e820__range_update_new_crypto(struct e820_table *table,
-						   u64 new_start,
-						   u64 new_size,
-						   const struct e820_entry *original,
-						   const void *data)
+static void __init crypto_updater__new(struct e820_table *table, u64 new_start,
+				       u64 new_size,
+				       const struct e820_entry *original,
+				       const void *data)
 {
-	struct e820_entry_crypto_updater_data *crypto_updater_data =
-		(struct e820_entry_crypto_updater_data *)data;
+	struct e820_crypto_updater_data *crypto_updater_data =
+		(struct e820_crypto_updater_data *)data;
 
 	__e820__range_add(table, new_start, new_size, original->type,
 			  crypto_updater_data->crypto_capable);
@@ -698,17 +699,16 @@ __e820__range_update_crypto(struct e820_table *table, u64 start, u64 size,
 			    enum e820_crypto_capabilities crypto_capable)
 {
 	struct e820_entry_updater updater = {
-		.should_update = __e820__range_should_update_crypto,
-		.update_existing = __e820__range_update_existing_crypto,
-		.new = __e820__range_update_new_crypto
+		.should_update = crypto_updater__should_update,
+		.update = crypto_updater__update,
+		.new = crypto_updater__new
 	};
 
-	struct e820_entry_crypto_updater_data data = {
+	struct e820_crypto_updater_data data = {
 		.crypto_capable = crypto_capable,
 	};
 
-	// Change this log level
- 	pr_debug("e820: crypto update [mem %#018Lx-%#018Lx]", start,
+ 	printk(KERN_DEBUG "e820: crypto update [mem %#018Lx-%#018Lx]", start,
  	       start + size - 1);
  	pr_cont(" ==> ");
  	if (crypto_capable == E820_CRYPTO_CAPABLE)
@@ -720,26 +720,24 @@ __e820__range_update_crypto(struct e820_table *table, u64 start, u64 size,
 	return __e820__handle_range_update(table, start, size, &updater, &data);
 }
 
-static bool __init __e820__range_should_remove(const struct e820_entry *entry,
-					       const void *data)
+static bool __init remover__should_update(const struct e820_entry *entry,
+					  const void *data)
 {
-	struct e820_entry_remover_data *remover_data =
-		(struct e820_entry_remover_data *)data;
+	struct e820_remover_data *remover_data =
+		(struct e820_remover_data *)data;
 
 	return !remover_data->check_type ||
 	       entry->type == remover_data->old_type;
 }
 
-static void __init __e820__range_remove(struct e820_entry *entry,
-					const void *data)
+static void __init remover__update(struct e820_entry *entry, const void *data)
 {
 	memset(entry, 0, sizeof(*entry));
 }
 
-static void __init __e820__range_remove_new(struct e820_table *table,
-					    u64 new_start, u64 new_size,
-					    const struct e820_entry *original,
-					    const void *data)
+static void __init remover__new(struct e820_table *table, u64 new_start,
+				u64 new_size, const struct e820_entry *original,
+				const void *data)
 {
 }
 
@@ -747,17 +745,17 @@ u64 __init e820__range_remove(u64 start, u64 size, enum e820_type old_type,
 			      bool check_type)
 {
 	struct e820_entry_updater updater = {
-		.should_update = __e820__range_should_remove,
-		.update_existing = __e820__range_remove,
-		.new = __e820__range_remove_new
+		.should_update = remover__should_update,
+		.update = remover__update,
+		.new = remover__new
 	};
 
-	struct e820_entry_remover_data data = {
+	struct e820_remover_data data = {
 		.check_type = check_type,
 		.old_type = old_type
 	};
 
-	pr_debug("e820: remove [mem %#010Lx-%#010Lx] ", start,
+	printk(KERN_DEBUG "e820: remove [mem %#018Lx-%#018Lx] ", start,
 	       start + size - 1);
 	if (check_type)
 		e820_print_type(old_type);
@@ -1479,9 +1477,6 @@ void __init e820__memblock_setup(void)
 {
 	int i;
 	u64 end;
-
-	e820__print_table("Before memblock");
-	pr_info("E820 table size: %u\n", e820_table->nr_entries);
 
 	/*
 	 * The bootstrap memblock region count maximum is 128 entries
