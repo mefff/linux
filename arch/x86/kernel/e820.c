@@ -475,145 +475,296 @@ static int __init append_e820_table(struct boot_e820_entry *entries, u32 nr_entr
 	return __append_e820_table(entries, nr_entries);
 }
 
-static u64 __init
-__e820__range_update(struct e820_table *table, u64 start, u64 size, enum e820_type old_type, enum e820_type new_type)
+// TODO: The names of the instanciated functions suck
+/**
+ * Helper type for __e820__handle_range_update. Each function
+ * corresponds to an action that __e820__handle_range_update
+ * does. Callbacks need to cast back @data to the corresponding type.
+ *
+ * @should_update: Return true if @entry needs to be updated, false
+ * otherwise.
+ *
+ * @update_existing: Apply desired actions to @entry.
+ *
+ * @new: Create new entry in the table with information gathered from
+ * @original and @data.
+ */
+struct e820_entry_updater {
+	bool (*should_update)(const struct e820_entry *entry, const void *data);
+	void (*update_existing)(struct e820_entry *entry, const void *data);
+	void (*new)(struct e820_table *table, u64 new_start, u64 new_size,
+		    const struct e820_entry *original, const void *data);
+};
+
+struct e820_entry_remover_data {
+	enum e820_type old_type;
+	bool check_type;
+};
+
+struct e820_entry_type_updater_data {
+	enum e820_type old_type;
+	enum e820_type new_type;
+};
+
+struct e820_entry_crypto_updater_data {
+	enum e820_crypto_capabilities crypto_capable;
+};
+
+/*
+ * Helper for __e820__handle_range_update to handle the case where
+ * neither the entry completely covers the range or the range
+ * completely covers the entry
+ */
+static u64 __init __e820__handle_intersected_range_update(
+	struct e820_table *table, u64 start, u64 size, struct e820_entry *entry,
+	const struct e820_entry_updater *updater, const void *data)
 {
 	u64 end;
-	unsigned int i;
-	u64 real_updated_size = 0;
-
-	BUG_ON(old_type == new_type);
+	u64 entry_end = entry->addr + entry->size;
+	u64 inner_start;
+	u64 inner_end;
+	u64 updated_size = 0;
 
 	if (size > (ULLONG_MAX - start))
 		size = ULLONG_MAX - start;
 
 	end = start + size;
-	printk(KERN_DEBUG "e820: update [mem %#010Lx-%#010Lx] ", start, end - 1);
+	inner_start = max(start, entry->addr);
+	inner_end = min(end, entry_end);
+
+	/* Range and entry do intersect and... */
+	if (inner_start < inner_end) {
+		/* Entry is on the left */
+		if (entry->addr < inner_start) {
+			/* Resize current entry */
+			entry->size = inner_start - entry->addr;
+		/* Entry is on the right */
+		} else {
+			/* Resize and move current section */
+			entry->addr = inner_end;
+			entry->size = entry_end - inner_end;
+		}
+
+		/* Create new entry with intersected region */
+		updater->new(table, inner_start, inner_end - inner_start, entry, data);
+
+		updated_size += inner_end - inner_start;
+	} /* Else: [start, end) doesn't cover entry */
+
+	return updated_size;
+}
+
+/*
+ * Update the table @table from @start to @start + @size doing the
+ * actions given in @updater.
+ */
+static u64 __init __e820__handle_range_update(
+	struct e820_table *table, u64 start, u64 size,
+	const struct e820_entry_updater *updater, const void *data)
+{
+	u64 updated_size = 0;
+	u64 end;
+	unsigned int i;
+
+	if (size > (ULLONG_MAX - start))
+		size = ULLONG_MAX - start;
+
+	end = start + size;
+
+	for (i = 0; i < table->nr_entries; i++) {
+		struct e820_entry *entry = &table->entries[i];
+		u64 entry_end = entry->addr + entry->size;
+
+		if (updater->should_update(data, entry)) {
+			/* Range completely covers entry */
+			if (entry->addr >= start && entry_end <= end) {
+				updater->update_existing(entry, data);
+				updated_size += entry->size;
+			/* Entry completely covers range */
+			} else if (start > entry->addr && end < entry_end) {
+				/* Resize current entry */
+				entry->size = start - entry->addr;
+
+				/* Create new entry with intersection region */
+				updater->new(table, start, size, entry, data);
+
+				/*
+				 * Create a new entry for the leftover
+				 * of the current entry
+				 */
+				__e820__range_add(table, end, entry_end - end,
+						  entry->type,
+						  entry->crypto_capable);
+
+				updated_size += size;
+			} else {
+				updated_size =
+					__e820__handle_intersected_range_update(
+						table, start, size, entry,
+						updater, data);
+			}
+		}
+	}
+
+	return updated_size;
+}
+
+static bool __init __e820__range_should_update_type(const struct e820_entry *entry, const void *data)
+{
+	struct e820_entry_type_updater_data *type_updater_data =
+		(struct e820_entry_type_updater_data *)data;
+
+	return entry->type == type_updater_data->old_type;
+}
+
+static void __init __e820__range_update_existing_type(struct e820_entry *entry, const void *data)
+{
+	struct e820_entry_type_updater_data *type_updater_data =
+		(struct e820_entry_type_updater_data *)data;
+
+	entry->type = type_updater_data->new_type;
+}
+
+static void __init __e820__range_update_new_type(struct e820_table *table,
+						 u64 new_start,
+						 u64 new_size,
+						 const struct e820_entry *original,
+						 const void *data)
+{
+	struct e820_entry_type_updater_data *type_updater_data =
+		(struct e820_entry_type_updater_data *)data;
+
+	__e820__range_add(table, new_start, new_size,
+			  type_updater_data->new_type,
+			  original->crypto_capable);
+}
+
+static u64 __init __e820__range_update(struct e820_table *table, u64 start,
+				       u64 size, enum e820_type old_type,
+				       enum e820_type new_type)
+{
+	struct e820_entry_updater updater = {
+		.should_update = __e820__range_should_update_type,
+		.update_existing = __e820__range_update_existing_type,
+		.new = __e820__range_update_new_type
+	};
+
+	struct e820_entry_type_updater_data data = {
+		.old_type = old_type,
+		.new_type = new_type
+	};
+
+	pr_debug("e820: update [mem %#018Lx-%#018Lx] ", start,
+	       start + size - 1);
 	e820_print_type(old_type);
 	pr_cont(" ==> ");
 	e820_print_type(new_type);
 	pr_cont("\n");
 
-	for (i = 0; i < table->nr_entries; i++) {
-		struct e820_entry *entry = &table->entries[i];
-		u64 final_start, final_end;
-		u64 entry_end;
-
-		if (entry->type != old_type)
-			continue;
-
-		entry_end = entry->addr + entry->size;
-
-		/* Completely covered by new range? */
-		if (entry->addr >= start && entry_end <= end) {
-			entry->type = new_type;
-			real_updated_size += entry->size;
-			continue;
-		}
-
-		/* New range is completely covered? */
-		if (entry->addr < start && entry_end > end) {
-			__e820__range_add(table, start, size, new_type, entry->crypto_capable);
-			__e820__range_add(table, end, entry_end - end, entry->type, entry->crypto_capable);
-			entry->size = start - entry->addr;
-			real_updated_size += size;
-			continue;
-		}
-
-		/* Partially covered: */
-		final_start = max(start, entry->addr);
-		final_end = min(end, entry_end);
-		if (final_start >= final_end)
-			continue;
-
-		__e820__range_add(table, final_start, final_end - final_start,
-				  new_type, entry->crypto_capable);
-
-		real_updated_size += final_end - final_start;
-
-		/*
-		 * Left range could be head or tail, so need to update
-		 * its size first:
-		 */
-		entry->size -= final_end - final_start;
-		if (entry->addr < final_start)
-			continue;
-
-		entry->addr = final_end;
-	}
-	return real_updated_size;
+	return __e820__handle_range_update(table, start, size, &updater, &data);
 }
 
-/*
- * Update crypto capabilities in a range
- */
-static u64 __init __e820__range_update_crypto(struct e820_table *table,
-					      u64 start, u64 size,
-					      enum e820_crypto_capabilities crypto_capable)
+static bool __init __e820__range_should_update_crypto(const struct e820_entry *entry, const void *data)
 {
-	u64 end;
-	unsigned int i;
-	u64 real_updated_size = 0;
+	struct e820_entry_crypto_updater_data *crypto_updater_data =
+		(struct e820_entry_crypto_updater_data *)data;
 
-	if (size > (ULLONG_MAX - start))
-		size = ULLONG_MAX - start;
+	return crypto_updater_data->crypto_capable != entry->crypto_capable;
+}
 
-	end = start + size;
-	printk(KERN_DEBUG "e820: update crypto capabilities [mem %#018Lx-%#018Lx] ", start, end - 1);
-	pr_cont(" ==> ");
-	if (crypto_capable == E820_CRYPTO_CAPABLE)
-		pr_cont("crypto capable");
-	else
-		pr_cont("not crypto capable");
+static void __init __e820__range_update_existing_crypto(struct e820_entry *entry, const void *data)
+{
+	struct e820_entry_crypto_updater_data *crypto_updater_data =
+		(struct e820_entry_crypto_updater_data *)data;
+
+	entry->crypto_capable = crypto_updater_data->crypto_capable;
+}
+
+static void __init __e820__range_update_new_crypto(struct e820_table *table,
+						   u64 new_start,
+						   u64 new_size,
+						   const struct e820_entry *original,
+						   const void *data)
+{
+	struct e820_entry_crypto_updater_data *crypto_updater_data =
+		(struct e820_entry_crypto_updater_data *)data;
+
+	__e820__range_add(table, new_start, new_size, original->type,
+			  crypto_updater_data->crypto_capable);
+}
+
+static u64 __init
+__e820__range_update_crypto(struct e820_table *table, u64 start, u64 size,
+			    enum e820_crypto_capabilities crypto_capable)
+{
+	struct e820_entry_updater updater = {
+		.should_update = __e820__range_should_update_crypto,
+		.update_existing = __e820__range_update_existing_crypto,
+		.new = __e820__range_update_new_crypto
+	};
+
+	struct e820_entry_crypto_updater_data data = {
+		.crypto_capable = crypto_capable,
+	};
+
+	// Change this log level
+ 	pr_debug("e820: crypto update [mem %#018Lx-%#018Lx]", start,
+ 	       start + size - 1);
+ 	pr_cont(" ==> ");
+ 	if (crypto_capable == E820_CRYPTO_CAPABLE)
+ 		pr_cont("crypto capable");
+ 	else
+ 		pr_cont("not crypto capable");
+ 	pr_cont("\n");
+
+	return __e820__handle_range_update(table, start, size, &updater, &data);
+}
+
+static bool __init __e820__range_should_remove(const struct e820_entry *entry,
+					       const void *data)
+{
+	struct e820_entry_remover_data *remover_data =
+		(struct e820_entry_remover_data *)data;
+
+	return !remover_data->check_type ||
+	       entry->type == remover_data->old_type;
+}
+
+static void __init __e820__range_remove(struct e820_entry *entry,
+					const void *data)
+{
+	memset(entry, 0, sizeof(*entry));
+}
+
+static void __init __e820__range_remove_new(struct e820_table *table,
+					    u64 new_start, u64 new_size,
+					    const struct e820_entry *original,
+					    const void *data)
+{
+}
+
+u64 __init e820__range_remove(u64 start, u64 size, enum e820_type old_type,
+			      bool check_type)
+{
+	struct e820_entry_updater updater = {
+		.should_update = __e820__range_should_remove,
+		.update_existing = __e820__range_remove,
+		.new = __e820__range_remove_new
+	};
+
+	struct e820_entry_remover_data data = {
+		.check_type = check_type,
+		.old_type = old_type
+	};
+
+	pr_debug("e820: remove [mem %#010Lx-%#010Lx] ", start,
+	       start + size - 1);
+	if (check_type)
+		e820_print_type(old_type);
 	pr_cont("\n");
 
-	for (i = 0; i < table->nr_entries; i++) {
-		struct e820_entry *entry = &table->entries[i];
-		u64 final_start, final_end;
-		u64 entry_end;
-		enum e820_type type = entry->type;
-
-		entry_end = entry->addr + entry->size;
-
-		/* Completely covered by new range? */
-		if (entry->addr >= start && entry_end <= end) {
-			entry->crypto_capable = crypto_capable;
-			real_updated_size += entry->size;
-			continue;
-		}
-
-		/* New range is completely covered? */
-		if (entry->addr < start && entry_end > end) {
-			__e820__range_add(table, start, size, type, crypto_capable);
-			__e820__range_add(table, end, entry_end - end,
-					  type, entry->crypto_capable);
-			entry->size = start - entry->addr;
-			real_updated_size += size;
-			continue;
-		}
-
-		/* Partially covered: */
-		final_start = max(start, entry->addr);
-		final_end = min(end, entry_end);
-		if (final_start >= final_end)
-			continue;
-
-		__e820__range_add(table, final_start, final_end - final_start,
-				  type, crypto_capable);
-
-		real_updated_size += final_end - final_start;
-
-		/*
-		 * Left range could be head or tail, so need to update
-		 * its size first:
-		 */
-		entry->size -= final_end - final_start;
-		if (entry->addr < final_start)
-			continue;
-
-		entry->addr = final_end;
-	}
-	return real_updated_size;
+	return __e820__handle_range_update(e820_table, start, size, &updater,
+					    &data);
 }
 
 u64 __init e820__range_mark_as_crypto_capable(u64 start, u64 size)
@@ -629,70 +780,6 @@ u64 __init e820__range_update(u64 start, u64 size, enum e820_type old_type, enum
 static u64 __init e820__range_update_kexec(u64 start, u64 size, enum e820_type old_type, enum e820_type  new_type)
 {
 	return __e820__range_update(e820_table_kexec, start, size, old_type, new_type);
-}
-
-/* Remove a range of memory from the E820 table: */
-u64 __init e820__range_remove(u64 start, u64 size, enum e820_type old_type, bool check_type)
-{
-	int i;
-	u64 end;
-	u64 real_removed_size = 0;
-
-	if (size > (ULLONG_MAX - start))
-		size = ULLONG_MAX - start;
-
-	end = start + size;
-	printk(KERN_DEBUG "e820: remove [mem %#010Lx-%#010Lx] ", start, end - 1);
-	if (check_type)
-		e820_print_type(old_type);
-	pr_cont("\n");
-
-	for (i = 0; i < e820_table->nr_entries; i++) {
-		struct e820_entry *entry = &e820_table->entries[i];
-		u64 final_start, final_end;
-		u64 entry_end;
-
-		if (check_type && entry->type != old_type)
-			continue;
-
-		entry_end = entry->addr + entry->size;
-
-		/* Completely covered? */
-		if (entry->addr >= start && entry_end <= end) {
-			real_removed_size += entry->size;
-			memset(entry, 0, sizeof(*entry));
-			continue;
-		}
-
-		/* Is the new range completely covered? */
-		if (entry->addr < start && entry_end > end) {
-			__e820__range_add(e820_table, end, entry_end - end,
-					  entry->type, entry->crypto_capable);
-
-			entry->size = start - entry->addr;
-			real_removed_size += size;
-			continue;
-		}
-
-		/* Partially covered: */
-		final_start = max(start, entry->addr);
-		final_end = min(end, entry_end);
-		if (final_start >= final_end)
-			continue;
-
-		real_removed_size += final_end - final_start;
-
-		/*
-		 * Left range could be head or tail, so need to update
-		 * the size first:
-		 */
-		entry->size -= final_end - final_start;
-		if (entry->addr < final_start)
-			continue;
-
-		entry->addr = final_end;
-	}
-	return real_removed_size;
 }
 
 void __init e820__update_table_print(void)
@@ -1392,6 +1479,9 @@ void __init e820__memblock_setup(void)
 {
 	int i;
 	u64 end;
+
+	e820__print_table("Before memblock");
+	pr_info("E820 table size: %u\n", e820_table->nr_entries);
 
 	/*
 	 * The bootstrap memblock region count maximum is 128 entries
