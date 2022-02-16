@@ -1,5 +1,5 @@
 What:		/sys/devices/system/node/nodeX/crypto_capable
-Date:		January 2022
+Date:		February 2022
 Contact:	Martin Fernandez <martin.fernandez@eclypsium.com>
 Users:		fwupd (https://fwupd.org)
 Description:

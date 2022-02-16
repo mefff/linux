@@ -185,7 +185,7 @@ static void __init do_add_efi_memmap(void)
 
 		e820__range_add(start, size, e820_type);
 		if (md->attribute & EFI_MEMORY_CPU_CRYPTO)
-			e820__range_mark_as_crypto_capable(start, size);
+			e820__range_set_crypto_capable(start, size);
 	}
 	e820__update_table(e820_table);
 }
@@ -447,10 +447,21 @@ static void __init efi_mark_e820_regions_as_crypto_capable(void)
 {
 	efi_memory_desc_t *md;
 
+	/*
+	 * Calling e820__range_set_crypto_capable several times
+	 * creates a bunch of entries in the E820 table. They probably
+	 * will get merged when calling update_table but we need the
+	 * space there anyway
+	 */
+	if (efi.memmap.nr_map + e820_table->nr_entries >= E820_MAX_ENTRIES) {
+		pr_err_once("E820 table is not large enough to fit EFI memmap; not marking entries as crypto capable\n");
+		return;
+	}
+
 	for_each_efi_memory_desc(md) {
 		if (md->attribute & EFI_MEMORY_CPU_CRYPTO)
-			e820__range_mark_as_crypto_capable(md->phys_addr,
-							   md->num_pages << EFI_PAGE_SHIFT);
+			e820__range_set_crypto_capable(md->phys_addr,
+						       md->num_pages << EFI_PAGE_SHIFT);
 	}
 
 	/*

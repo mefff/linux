@@ -44,12 +44,12 @@ extern unsigned long long max_possible_pfn;
  * @MEMBLOCK_CRYPTO_CAPABLE: capable of hardware encryption
  */
 enum memblock_flags {
-	MEMBLOCK_NONE		= 0x0,	/* No special request */
-	MEMBLOCK_HOTPLUG	= 0x1,	/* hotpluggable region */
-	MEMBLOCK_MIRROR		= 0x2,	/* mirrored region */
-	MEMBLOCK_NOMAP		= 0x4,	/* don't add to kernel direct mapping */
-	MEMBLOCK_DRIVER_MANAGED = 0x8,	/* always detected via a driver */
-	MEMBLOCK_CRYPTO_CAPABLE = 0x10,  /* capable of hardware encryption */
+	MEMBLOCK_NONE		= 0x0,		/* No special request */
+	MEMBLOCK_HOTPLUG	= 0x1,		/* hotpluggable region */
+	MEMBLOCK_MIRROR		= 0x2,		/* mirrored region */
+	MEMBLOCK_NOMAP		= 0x4,		/* don't add to kernel direct mapping */
+	MEMBLOCK_DRIVER_MANAGED = 0x8,		/* always detected via a driver */
+	MEMBLOCK_CRYPTO_CAPABLE = 0x10,		/* capable of hardware encryption */
 };
 
 /**
