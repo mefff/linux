@@ -206,25 +206,23 @@ bool __init_memblock memblock_overlaps_region(struct memblock_type *type,
 bool __init_memblock memblock_node_is_crypto_capable(int nid)
 {
 	struct memblock_region *region;
-	bool crypto_capable = false;
-	bool not_crypto_capable = false;
+	int crypto_capables = 0;
+	int not_crypto_capables = 0;
 
 	for_each_mem_region(region) {
 		if (memblock_get_region_node(region) == nid) {
-			crypto_capable =
-				crypto_capable ||
-				(region->flags & MEMBLOCK_CRYPTO_CAPABLE);
-			not_crypto_capable =
-				not_crypto_capable ||
-				!(region->flags & MEMBLOCK_CRYPTO_CAPABLE);
+			if (region->flags & MEMBLOCK_CRYPTO_CAPABLE)
+				crypto_capables++;
+			else
+				not_crypto_capables++;
 		}
 	}
 
-	if (crypto_capable && not_crypto_capable)
-		pr_warn_once("Node %d has regions that are encryptable and regions that aren't",
-			     nid);
+	if (crypto_capables > 0 && not_crypto_capables > 0)
+		pr_warn("Node %d has %d regions that are encryptable and %d regions that aren't",
+			nid, not_crypto_capables, crypto_capables);
 
-	return !not_crypto_capable;
+	return not_crypto_capables == 0;
 }
 
 /**
