@@ -200,8 +200,8 @@ bool __init_memblock memblock_overlaps_region(struct memblock_type *type,
  * node @nid are capable of hardware encryption.
  *
  * Return:
- * true if every region in memory memblock_type is capable of
- * encryption, false otherwise.
+ * true if every region in @nid is capable of encryption, false
+ * otherwise.
  */
 bool __init_memblock memblock_node_is_crypto_capable(int nid)
 {
@@ -222,7 +222,7 @@ bool __init_memblock memblock_node_is_crypto_capable(int nid)
 		pr_warn("Node %d has %d regions that are encryptable and %d regions that aren't",
 			nid, not_crypto_capables, crypto_capables);
 
-	return not_crypto_capables == 0;
+	return crypto_capables > 0 && not_crypto_capables == 0;
 }
 
 /**

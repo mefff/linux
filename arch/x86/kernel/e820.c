@@ -481,9 +481,9 @@ static int __init append_e820_table(struct boot_e820_entry *entries, u32 nr_entr
  * @should_update: Return true if @entry needs to be updated, false
  * otherwise.
  * @update: Apply desired actions to an @entry that is inside the
- * range and satisfies @should_update.
+ * range and satisfies @should_update. Can be set to NULL to avoid empty functions.
  * @new: Create new entry in the table with information gathered from
- * @original and @data.
+ * @original and @data. Can be set to NULL to avoid empty functions.
  *
  * Each function corresponds to an action that
  * __e820__handle_range_update() does. Callbacks need to cast @data back
@@ -496,22 +496,10 @@ struct e820_entry_updater {
 		    const struct e820_entry *original, const void *data);
 };
 
-/**
- * __e820__handle_intersected_range_update() - Helper function for
- * __e820__handle_range_update().
- * @table: Target e820_table.
- * @start: Start of the range.
- * @size: Size of the range.
- * @entry: Current entry that __e820__handle_range_update() was
- * looking into.
- * @updater: updater parameter of __e820__handle_range_update().
- * @data: data parameter of __e820__handle_range_update().
- *
+/*
  * Helper for __e820__handle_range_update to handle the case where
  * neither the entry completely covers the range nor the range
  * completely covers the entry.
- *
- * Return: The updated size.
  */
 static u64 __init
 __e820__handle_intersected_range_update(struct e820_table *table,
@@ -546,8 +534,9 @@ __e820__handle_intersected_range_update(struct e820_table *table,
 			entry->addr = inner_end;
 			entry->size = entry_end - inner_end;
 		}
-		/* Create new entry with intersected region */
-		updater->new(table, inner_start, inner_end - inner_start, entry, data);
+		if (updater->new != NULL)
+			/* Create new entry with intersected region */
+			updater->new(table, inner_start, inner_end - inner_start, entry, data);
 
 		updated_size += inner_end - inner_start;
 	} /* Else: [start, end) doesn't cover entry */
@@ -555,20 +544,9 @@ __e820__handle_intersected_range_update(struct e820_table *table,
 	return updated_size;
 }
 
-/**
- * __e820__handle_range_update(): Helper function to update an address
- * range in a e820_table
- * @table: e820_table that we want to modify.
- * @start: Start of the range.
- * @size: Size of the range.
- * @updater: Callbacks to modify the table.
- * @data: Information to modify the table. This must be an struct
- * e820_type_*_data.
- *
+/*
  * Update the table @table in [@start, @start + @size) doing the
  * actions given in @updater.
- *
- * Return: The updated size.
  */
 static u64 __init
 __e820__handle_range_update(struct e820_table *table,
@@ -594,14 +572,16 @@ __e820__handle_range_update(struct e820_table *table,
 			/* Range completely covers entry */
 			if (entry->addr >= start && entry_end <= end) {
 				updated_size += entry->size;
-				updater->update(entry, data);
+				if (updater->update != NULL)
+					updater->update(entry, data);
 			/* Entry completely covers range */
 			} else if (start > entry->addr && end < entry_end) {
 				/* Resize current entry */
 				entry->size = start - entry->addr;
 
-				/* Create new entry with intersection region */
-				updater->new(table, start, size, entry, data);
+				if (updater->new != NULL)
+					/* Create new entry with intersection region */
+					updater->new(table, start, size, entry, data);
 
 				/*
 				 * Create a new entry for the leftover
@@ -623,14 +603,8 @@ __e820__handle_range_update(struct e820_table *table,
 	return updated_size;
 }
 
-/**
- * struct e820_type_updater_data - Helper type for
- * __e820__range_update().
- * @old_type: old_type parameter of __e820__range_update().
- * @new_type: new_type parameter of __e820__range_update().
- *
- * This is intended to be used as the @data argument for the
- * e820_entry_updater callbacks.
+/*
+ * Type helper for the e820_entry_updater callbacks.
  */
 struct e820_type_updater_data {
 	enum e820_type old_type;
@@ -640,8 +614,7 @@ struct e820_type_updater_data {
 static bool __init type_updater__should_update(const struct e820_entry *entry,
 					       const void *data)
 {
-	const struct e820_type_updater_data *type_updater_data =
-		(const struct e820_type_updater_data *)data;
+	const struct e820_type_updater_data *type_updater_data = data;
 
 	return entry->type == type_updater_data->old_type;
 }
@@ -649,8 +622,7 @@ static bool __init type_updater__should_update(const struct e820_entry *entry,
 static void __init type_updater__update(struct e820_entry *entry,
 					const void *data)
 {
-	const struct e820_type_updater_data *type_updater_data =
-		(const struct e820_type_updater_data *)data;
+	const struct e820_type_updater_data *type_updater_data = data;
 
 	entry->type = type_updater_data->new_type;
 }
@@ -660,11 +632,11 @@ static void __init type_updater__new(struct e820_table *table, u64 new_start,
 				     const struct e820_entry *original,
 				     const void *data)
 {
-	const struct e820_type_updater_data *type_updater_data =
-		(const struct e820_type_updater_data *)data;
+	const struct e820_type_updater_data *type_updater_data = data;
 
 	__e820__range_add(table, new_start, new_size,
-			  type_updater_data->new_type, original->crypto_capable);
+			  type_updater_data->new_type,
+			  original->crypto_capable);
 }
 
 static u64 __init __e820__range_update(struct e820_table *table, u64 start,
@@ -694,18 +666,9 @@ static u64 __init __e820__range_update(struct e820_table *table, u64 start,
 	return __e820__handle_range_update(table, start, size, &updater, &data);
 }
 
-/**
- * e820__range_update() - Update the type of a given address range in
- * e820_table.
- * @start: Start of the range.
- * @size: Size of the range.
- * @old_type: Type that we want to change.
- * @new_type: New type to replace @old_type.
- *
+/*
  * Update type of addresses in [@start, @start + @size) from @old_type
  * to @new_type in e820_table.
- *
- * Return: The size updated.
  */
 u64 __init e820__range_update(u64 start, u64 size, enum e820_type old_type,
 			      enum e820_type new_type)
@@ -716,18 +679,9 @@ u64 __init e820__range_update(u64 start, u64 size, enum e820_type old_type,
 	return crypto_updater_data->crypto_capable != entry->crypto_capable;
 }
 
-/**
- * e820__range_update_kexec() - Update the type of a given address
- * range in e820_table_kexec.
- * @start: Start of the range.
- * @size: Size of the range.
- * @old_type: Type that we want to change.
- * @new_type: New type to replace @old_type.
- *
+/*
  * Update type of addresses in [@start, @start + @size) from @old_type
  * to @new_type in e820_table_kexec.
- *
- * Return: The size updated.
  */
 static u64 __init e820__range_update_kexec(u64 start, u64 size,
 					   enum e820_type old_type,
@@ -739,13 +693,8 @@ static u64 __init e820__range_update_kexec(u64 start, u64 size,
 	entry->crypto_capable = crypto_updater_data->crypto_capable;
 }
 
-/**
- * struct e820_remover_data - Helper type for e820__range_remove().
- * @old_type: old_type parameter of e820__range_remove().
- * @check_type: check_type parameter of e820__range_remove().
- *
- * This is intended to be used as the @data argument for the
- * e820_entry_updater callbacks.
+/*
+ * Type helper for the e820_entry_updater callbacks.
  */
 struct e820_remover_data {
 	enum e820_type old_type;
@@ -755,8 +704,7 @@ struct e820_remover_data {
 static bool __init remover__should_update(const struct e820_entry *entry,
 					  const void *data)
 {
-	const struct e820_remover_data *remover_data =
-		(const struct e820_remover_data *)data;
+	const struct e820_remover_data *remover_data = data;
 
 	return !remover_data->check_type ||
 	       entry->type == remover_data->old_type;
@@ -767,23 +715,9 @@ static void __init remover__update(struct e820_entry *entry, const void *data)
 	memset(entry, 0, sizeof(*entry));
 }
 
-static void __init remover__new(struct e820_table *table, u64 new_start,
-				u64 new_size, const struct e820_entry *original,
-				const void *data)
-{
-}
-
-/**
- * e820__range_remove() - Remove an address range from e820_table.
- * @start: Start of the address range.
- * @size: Size of the address range.
- * @old_type: Type of the entries that we want to remove.
- * @check_type: Bool to decide if ignore @old_type or not.
- *
+/*
  * Remove [@start, @start + @size) from e820_table. If @check_type is
  * true remove only entries with type @old_type.
- *
- * Return: The size removed.
  */
 u64 __init e820__range_remove(u64 start, u64 size, enum e820_type old_type,
 			      bool check_type)
@@ -791,7 +725,7 @@ u64 __init e820__range_remove(u64 start, u64 size, enum e820_type old_type,
 	struct e820_entry_updater updater = {
 		.should_update = remover__should_update,
 		.update = remover__update,
-		.new = remover__new
+		.new = NULL
 	};
 
 	struct e820_remover_data data = {
@@ -806,38 +740,23 @@ u64 __init e820__range_remove(u64 start, u64 size, enum e820_type old_type,
 	pr_cont("\n");
 
 	return __e820__handle_range_update(e820_table, start, size, &updater,
-					    &data);
+					   &data);
 }
-
-/**
- * struct e820_crypto_updater_data - Helper type for
- * __e820__range_update_crypto().
- * @crypto_capable: crypto_capable parameter of
- * __e820__range_update_crypto().
- *
- * This is intended to be used as the @data argument for the
- * e820_entry_updater callbacks.
- */
-struct e820_crypto_updater_data {
-	enum e820_crypto_capabilities crypto_capable;
-};
 
 static bool __init crypto_updater__should_update(const struct e820_entry *entry,
 						 const void *data)
 {
-	const struct e820_crypto_updater_data *crypto_updater_data =
-		(const struct e820_crypto_updater_data *)data;
+	const enum e820_crypto_capabilities *crypto_capable = data;
 
-	return crypto_updater_data->crypto_capable != entry->crypto_capable;
+	return *crypto_capable != entry->crypto_capable;
 }
 
 static void __init crypto_updater__update(struct e820_entry *entry,
 					  const void *data)
 {
-	const struct e820_crypto_updater_data *crypto_updater_data =
-		(const struct e820_crypto_updater_data *)data;
+	const enum e820_crypto_capabilities *crypto_capable = data;
 
-	entry->crypto_capable = crypto_updater_data->crypto_capable;
+	entry->crypto_capable = *crypto_capable;
 }
 
 static void __init crypto_updater__new(struct e820_table *table, u64 new_start,
@@ -845,11 +764,9 @@ static void __init crypto_updater__new(struct e820_table *table, u64 new_start,
 				       const struct e820_entry *original,
 				       const void *data)
 {
-	const struct e820_crypto_updater_data *crypto_updater_data =
-		(const struct e820_crypto_updater_data *)data;
+	const enum e820_crypto_capabilities *crypto_capable = data;
 
-	__e820__range_add(table, new_start, new_size, original->type,
-			  crypto_updater_data->crypto_capable);
+	__e820__range_add(table, new_start, new_size, original->type, *crypto_capable);
 }
 
 static u64 __init
@@ -862,10 +779,6 @@ __e820__range_update_crypto(struct e820_table *table, u64 start, u64 size,
 		.new = crypto_updater__new
 	};
 
-	struct e820_crypto_updater_data data = {
-		.crypto_capable = crypto_capable,
-	};
-
 	printk(KERN_DEBUG "e820: crypto update [mem %#018Lx-%#018Lx]", start,
 	       start + size - 1);
 	pr_cont(" ==> ");
@@ -875,18 +788,12 @@ __e820__range_update_crypto(struct e820_table *table, u64 start, u64 size,
 		pr_cont("not crypto capable");
 	pr_cont("\n");
 
-	return __e820__handle_range_update(table, start, size, &updater, &data);
+	return __e820__handle_range_update(table, start, size, &updater,
+					   &crypto_capable);
 }
 
-/**
- * e820__range_set_crypto_capable() - Set %E820_CRYPTO_CAPABLE to a
- * given range of addresses in e820_table.
- * @start: Start of the range.
- * @size: Size of the range.
- *
+/*
  * Set %E820_CRYPTO_CAPABLE to [@start, @start + @size) in e820_table.
- *
- * Return: The size updated.
  */
 u64 __init e820__range_set_crypto_capable(u64 start, u64 size)
 {
