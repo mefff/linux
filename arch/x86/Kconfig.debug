@@ -225,6 +225,11 @@ config PUNIT_ATOM_DEBUG
 	  The current power state can be read from
 	  /sys/kernel/debug/punit_atom/dev_power_state
 
+config E820_KUNIT_TEST
+	tristate "Tests for E820" if !KUNIT_ALL_TESTS
+	depends on KUNIT=y
+	default KUNIT_ALL_TESTS
+
 choice
 	prompt "Choose kernel unwinder"
 	default UNWINDER_ORC if X86_64
