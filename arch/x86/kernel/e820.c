@@ -1552,3 +1552,8 @@ void __init e820__memblock_setup(void)
 
 	memblock_dump_all();
 }
+
+#ifdef CONFIG_E820_KUNIT_TEST
+/* Let e820_test have access the static functions in this file */
+#include "e820_test.c"
+#endif
